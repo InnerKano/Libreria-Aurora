@@ -193,7 +193,16 @@ class UsuarioViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         try:
-            usuario = Usuario.objects.get(email=email)
+            usuario_qs = Usuario.objects.filter(email=email).order_by('id')
+            if not usuario_qs.exists():
+                raise Usuario.DoesNotExist
+            if usuario_qs.count() > 1:
+                logger.warning(
+                    "Se encontraron múltiples usuarios con el mismo email (%s). Se usará el primero (ID=%s)",
+                    email,
+                    usuario_qs.first().id
+                )
+            usuario = usuario_qs.first()
             
             # Generar token de recuperación
             token_obj = TokenRecuperacionPassword.generar_token(usuario)
