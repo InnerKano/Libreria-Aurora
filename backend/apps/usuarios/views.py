@@ -5,6 +5,8 @@ from rest_framework.decorators import action
 from django.contrib.auth import get_user_model
 from rest_framework.permissions import AllowAny
 from django.core.mail import send_mail
+import logging
+from smtplib import SMTPException
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 from .serializers import (
     ListaPreferenciasSerializer,
@@ -22,6 +24,7 @@ from .models import UsuarioPreferencias, TokenRecuperacionPassword, Libro, Categ
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter, OpenApiExample
 from django.utils.http import urlencode
 
+logger = logging.getLogger(__name__)
 Usuario = get_user_model()
 
 @extend_schema_view(
@@ -215,14 +218,29 @@ Si no has solicitado cambiar tu contraseña, puedes ignorar este mensaje.
 Saludos,
 El equipo de Librería Aurora
 """
-            
-            send_mail(
-                'Recuperación de contraseña - Librería Aurora',
-                mensaje,
-                'auroralibreria05@gmail.com',
-                [email],
-                fail_silently=False,
-            )
+
+            try:
+                send_mail(
+                    'Recuperación de contraseña - Librería Aurora',
+                    mensaje,
+                    'auroralibreria05@gmail.com',
+                    [email],
+                    fail_silently=False,
+                )
+            except SMTPException as exc:
+                logger.exception("Error enviando correo de recuperación para %s", email)
+                return Response(
+                    {
+                        'error': 'No fue posible enviar el correo de recuperación. Inténtalo nuevamente en unos minutos.'
+                    },
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE
+                )
+            except Exception as exc:  # Capturamos cualquier otro error inesperado
+                logger.exception("Error inesperado durante la recuperación de contraseña")
+                return Response(
+                    {'error': 'Ocurrió un error inesperado al procesar la solicitud.'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
             return Response(
                 {'message': 'Correo de recuperación enviado'},
                 status=status.HTTP_200_OK
