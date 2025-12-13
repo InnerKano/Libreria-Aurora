@@ -197,7 +197,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             token = token_obj.token
             
             # Enviar email con el token
-            frontend_url = "https://pausa11.github.io/Proyecto-Libreria/#/reset-password"
+            frontend_url = "https://pausa11.github.io/Libreria-Aurora/#/reset-password"
             reset_url = f"{frontend_url}?token={token}"
             
             # Construir mensaje de correo
