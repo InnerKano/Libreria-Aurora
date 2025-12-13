@@ -262,8 +262,8 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'auroralibreria05@gmail.com' 
-EMAIL_HOST_PASSWORD = 'xdgwudfkygokmftq'  
+EMAIL_HOST_USER = 'libreriaaurora03@gmail.com' 
+EMAIL_HOST_PASSWORD = 'ydmz vzya vdgi avup'  
 
 CLOUDINARY_STORAGE = {
     'CLOUD_NAME': env('CLOUDINARY_CLOUD_NAME'),
