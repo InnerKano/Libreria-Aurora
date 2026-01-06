@@ -30,6 +30,40 @@ Este proyecto implementa un sistema completo de gestión para una librería, con
 
 ## Configuración del Entorno de Desarrollo
 
+## Base de Datos en Local (PostgreSQL con Docker)
+
+Este proyecto requiere PostgreSQL también en desarrollo (hay modelos/migraciones que usan features de Postgres).
+
+1. **Levantar PostgreSQL con Docker** (desde la raíz del repo):
+   ```bash
+   docker compose up -d
+   docker ps
+   ```
+
+2. **Configurar el backend para usar la BD local** en `backend/.env` (no se sube a git):
+   ```env
+   DEBUG=True
+   ENVIRONMENT=development
+   DATABASE_URL_LOCAL=postgresql://libreria_user:libreria_pass@localhost:5432/proyecto_libreria
+   ```
+   Nota: en local evita definir `DATABASE_URL` para no conectarte por accidente a producción.
+
+3. **Migrar**:
+   ```bash
+   cd backend
+   python manage.py migrate
+   ```
+
+4. **Verificar que estás en local**:
+   ```bash
+   python manage.py shell
+   ```
+   ```python
+   from django.db import connection
+   connection.settings_dict.get("HOST")
+   ```
+   Debe devolver `localhost` o `127.0.0.1`.
+
 ### Instalación Inicial
 
 1. **Clonar el Repositorio**

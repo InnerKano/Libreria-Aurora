@@ -1,4 +1,10 @@
-/backend/venv
-/backend/.env
+/backend/venv/
+
+# Environment files (keep *.example files tracked)
+.env
 backend/.env
-*.pyc
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo

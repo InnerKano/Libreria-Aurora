@@ -14,6 +14,8 @@ from pathlib import Path
 from datetime import timedelta
 import environ
 import os
+from django.core.exceptions import ImproperlyConfigured
+from urllib.parse import urlparse
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -41,6 +43,14 @@ SECRET_KEY = env('DJANGO_SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env('DEBUG')
+
+# Entorno de ejecución: si no se define explícitamente, se infiere desde DEBUG
+# - DEBUG=False  => production (ej. Render)
+# - DEBUG=True   => development (local)
+ENVIRONMENT = env('ENVIRONMENT', default=None)
+if ENVIRONMENT is None:
+    ENVIRONMENT = 'production' if not DEBUG else 'development'
+ENVIRONMENT = str(ENVIRONMENT).strip().lower()
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
@@ -112,9 +122,42 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DATABASES = {
-    'default': env.db('DATABASE_URL')
-}
+if ENVIRONMENT == 'production':
+    # Render/producción normalmente expone DATABASE_URL como variable de entorno
+    DATABASES = {
+        'default': env.db('DATABASE_URL')
+    }
+else:
+    # Desarrollo local: preferir Postgres local si existe DATABASE_URL_LOCAL.
+    # Si no existe, fallar explícitamente: este proyecto usa features/migraciones
+    # compatibles con PostgreSQL (SQLite no es un fallback seguro aquí).
+    database_url_local = env('DATABASE_URL_LOCAL', default=None)
+    if database_url_local:
+        DATABASES = {
+            'default': env.db('DATABASE_URL_LOCAL')
+        }
+    else:
+        # Compatibilidad: si el desarrollador ya usa DATABASE_URL pero apuntando
+        # a una BD local, permitirlo. Si apunta a un host remoto, bloquearlo.
+        database_url = env('DATABASE_URL', default=None)
+        hostname = None
+        if database_url:
+            try:
+                hostname = urlparse(database_url).hostname
+            except Exception:
+                hostname = None
+
+        if database_url and hostname in {'localhost', '127.0.0.1'}:
+            DATABASES = {
+                'default': env.db('DATABASE_URL')
+            }
+        else:
+            raise ImproperlyConfigured(
+                'Falta DATABASE_URL_LOCAL para desarrollo. '
+                'Define DATABASE_URL_LOCAL (PostgreSQL local) en backend/.env. '
+                'Para producción (Render), usa DATABASE_URL. '
+                'Por seguridad, DATABASE_URL en desarrollo solo se acepta si apunta a localhost.'
+            )
 
 
 # Password validation
