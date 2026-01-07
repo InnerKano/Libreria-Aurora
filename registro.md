@@ -2641,3 +2641,76 @@ Algunos archivos con ":" no eran reconocidos, asi que se agrego el patron.
 5. No se requiere intervención manual ni ejecución de scripts
 
 **Resultado**: El flujo de trabajo manual y dependiente de scripts se transforma en una interfaz de administración automatizada, ahorrando tiempo y reduciendo errores, manteniendo las convenciones de nombres y la integración con Cloudinary.
+
+---
+
+## [2026-01-07] Normalización de URLs de portadas en módulos de Compras (Carrito/Reservas/Pedidos)
+
+### Problema
+
+En varias pantallas del frontend, la portada del libro se renderizaba usando `libro.portada`.
+Dependiendo del serializer/origen de datos, ese campo podía llegar como:
+
+- `public_id` o ruta parcial (ej: `image/upload/Don_Quijote_de_la_Mancha`)
+- URL absoluta (ej: `https://res.cloudinary.com/.../image/upload/...`)
+
+Esto provocaba imágenes rotas en:
+
+- Carrito
+- Reservas
+- Pedidos
+
+Mientras que `DetalleLibro` funcionaba porque consume `portada_url` (URL absoluta) proveniente del módulo `libros`.
+
+### Objetivo
+
+Unificar la forma “correcta” de consumir portadas en todo el proyecto:
+
+1. **Backend expone un campo estable para UI:** `portada_url`.
+2. **Una sola fuente de verdad:** el serializer de `apps.libros` define cómo construir la URL.
+3. **Frontend consume `portada_url`**, evitando acoplarse a Cloudinary (o a cualquier proveedor futuro).
+
+### Estrategia (Backend)
+
+**Decisión:** en el módulo `compras`, reutilizar el `LibroSerializer` del módulo `libros` en lugar de duplicar lógica.
+
+- Archivo: `backend/apps/compras/serializers.py`
+- Cambio clave:
+  - Antes: `compras` tenía su propio `LibroSerializer` (y/o devolvía `portada` sin garantizar `portada_url`).
+  - Después: `compras` importa y usa `apps.libros.serializers.LibroSerializer` como serializer público del libro.
+
+**Motivo (mantenimiento/escalabilidad):** si mañana cambia el proveedor de imágenes (Cloudinary → S3, etc.), la lógica se ajusta solo en `apps/libros/serializers.py` y se propaga automáticamente a Carrito/Reservas/Pedidos.
+
+### Estrategia (Frontend)
+
+**Decisión:** estandarizar la obtención de portada con un helper reutilizable.
+
+- Archivo: `libreria-aurora/src/utils/media.js`
+- Funciones:
+  - `getBookCoverSrc(book)`: prioriza `portada_url` y deja `portada` como fallback.
+  - `resolveMediaUrl(raw)`: si llega una ruta relativa (ej: `image/upload/...`), permite prefijar una base configurable.
+
+**Config opcional:**
+
+- `REACT_APP_MEDIA_BASE_URL` (recomendado) o `REACT_APP_CLOUDINARY_BASE_URL`
+- Solo aplica como fallback cuando el backend entrega rutas relativas.
+
+### Archivos del Frontend actualizados
+
+- `libreria-aurora/src/components/carrito.jsx`
+- `libreria-aurora/src/components/profile/reservas.jsx`
+- `libreria-aurora/src/components/profile/pedidos.jsx`
+
+### Antes vs Después
+
+**Antes**
+
+- UI consumía `libro.portada` en Compras.
+- Si el valor no traía dominio, el navegador no podía resolver la URL.
+- La experiencia era inconsistente: `DetalleLibro` OK, Carrito/Reservas/Pedidos no.
+
+**Después**
+
+- `compras` expone libros con `portada_url` (misma lógica que `libros`).
+- UI consume `portada_url` (con fallback controlado).
+- Se reduce duplicación y se mejora la coherencia entre módulos.

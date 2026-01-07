@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getApiUrl } from "../../api/config";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { getBookCoverSrc } from "../../utils/media";
 
 function Reservas() {
   const [reservas, setReservas] = useState([]);
@@ -81,7 +82,7 @@ function Reservas() {
                 <div className="flex gap-4 mb-4">
                   <div className="flex-shrink-0">
                     <img
-                      src={reserva.libro.portada}
+                      src={getBookCoverSrc(reserva.libro)}
                       alt={reserva.libro.titulo}
                       className="w-24 h-32 object-cover rounded-md"
                     />

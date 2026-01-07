@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getApiUrl } from "../../api/config";
 import { useNavigate } from "react-router-dom";
 import { toast, Toaster } from "sonner";
+import { getBookCoverSrc } from "../../utils/media";
 
 function Pedidos() {
   const [pedidos, setPedidos] = useState([]);
@@ -123,7 +124,7 @@ function Pedidos() {
         {pedido.pedidolibro_set.map((item, index) => (
           <div key={index} className="flex gap-4 mb-4">
             <div className="flex-shrink-0">
-              <img src={item.libro.portada} alt={item.libro.titulo} className="w-24 h-32 object-cover rounded-md" />
+              <img src={getBookCoverSrc(item.libro)} alt={item.libro.titulo} className="w-24 h-32 object-cover rounded-md" />
             </div>
             <div className="flex-1 bg-gray-100 rounded-md p-4">
               <p className="text-sm text-gray-600"><strong>Descripción:</strong> {item.libro.descripcion}</p>
