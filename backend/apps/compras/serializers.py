@@ -1,4 +1,7 @@
 from rest_framework import serializers
+from rest_framework.fields import URLField
+from drf_spectacular.utils import extend_schema_field
+
 from .models import Carrito, HistorialDeCompras, Pedidos, CarritoLibro, PedidoLibro, Reserva
 from apps.libros.models import Libro
 
@@ -21,9 +24,30 @@ class PedidosSerializer(serializers.ModelSerializer):
         
     
 class LibroSerializer(serializers.ModelSerializer):
+    portada_url = serializers.SerializerMethodField()
+    categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
+
     class Meta:
         model = Libro
         fields = '__all__'
+
+    @extend_schema_field(URLField)
+    def get_portada_url(self, obj):
+        """Obtiene la URL de la portada desde Cloudinary"""
+        if obj.portada:
+            try:
+                # CloudinaryField puede tener una URL directa
+                if hasattr(obj.portada, 'url'):
+                    return obj.portada.url
+
+                from cloudinary.utils import cloudinary_url
+
+                public_id = obj.portada.public_id if hasattr(obj.portada, 'public_id') else str(obj.portada)
+                url, _ = cloudinary_url(public_id)
+                return url
+            except Exception:
+                return None
+        return None
 
 class PedidoLibroSerializer(serializers.ModelSerializer):
     libro = LibroSerializer(read_only=True)  # Muestra el objeto libro completo

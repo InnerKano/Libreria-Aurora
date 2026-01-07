@@ -25,6 +25,22 @@ function CarritoLibro() {
     departamento: "",
   });
 
+  const getCoverSrc = (libro) => {
+    const raw = libro?.portada_url || libro?.portada;
+    if (!raw) return "";
+
+    // Ya viene como URL absoluta
+    if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+
+    // Fallback para cuando backend devuelve una ruta parcial tipo "image/upload/..."
+    if (raw.startsWith("image/")) {
+      const base = process.env.REACT_APP_CLOUDINARY_BASE_URL || "https://res.cloudinary.com/dvmyip4cp/";
+      return `${base}${raw}`;
+    }
+
+    return raw;
+  };
+
   useEffect(() => {
       getUserData();
   }, []);
@@ -262,10 +278,13 @@ function CarritoLibro() {
       <NavBar />
       <div className="max-w-3xl mx-auto my-10 p-6 bg-white rounded-xl shadow-md border border-blue-200">
         <h2 className="text-2xl font-bold mb-6 text-gray-800">Tu Carrito</h2>
+        {/* Imprime en consola el objeto libro */
+        console.log(carrito)}
+
         {carrito.map((carrito,idx) => (
           <div className="flex gap-6 mb-6 items-start" key={idx}>
             <div className="flex-shrink-0">
-                <img src={carrito.libro.portada} alt={`Portada del libro: ${carrito.libro.titulo}`} className="w-32 h-48 object-cover rounded-md" />
+                <img src={getCoverSrc(carrito.libro)} alt={`Portada del libro: ${carrito.libro.titulo}`} className="w-32 h-48 object-cover rounded-md" />
             </div>
             <div className="flex-1 space-y-2">
               <h3 className="text-lg font-semibold">{carrito.libro.titulo}</h3>
