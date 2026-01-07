@@ -9,7 +9,7 @@ function DetalleLibro() {
   const navigate = useNavigate();
   const location = useLocation();
   const libroData = location.state?.libro;
-  const isStaff = useIsStaff();
+  const { isStaff: userIsStaff, loading: staffLoading } = useIsStaff();
 
   const backendCartPost = getApiUrl("/api/compras/carritos/agregar_libro/");
 
@@ -135,7 +135,7 @@ function DetalleLibro() {
                 <p><strong>Editorial:</strong> {libroData.editorial}</p>
                 <p><strong>Género:</strong> {libroData.categoria_nombre}</p>
               </div>
-              { !isStaff && (
+              {!staffLoading && !userIsStaff && (
                 <BuyBookSection
                   stock={libroData.stock}
                   onBuy={handleBuy}
