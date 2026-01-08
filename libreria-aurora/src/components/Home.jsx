@@ -119,6 +119,7 @@ const Home = () => {
           <div className="w-full flex justify-center items-center gap-4">
             {popularBooks.map((book) => (
               <BookCard
+                key={book.id ?? `${book.titulo}-${book.isbn ?? book.codigo}`}
                 book={book}
               />
             ))}
@@ -186,6 +187,7 @@ const Home = () => {
           <div className="w-full flex justify-center items-center gap-4">
             {recentBooks.map((book) => (
               <BookCard
+                key={book.id ?? `${book.titulo}-${book.isbn ?? book.codigo}`}
                 book={book}
               />
             ))}
