@@ -128,7 +128,7 @@ function DetalleLibro() {
               <h1 className="text-2xl font-bold text-gray-800">{libroData.titulo}</h1>
               <p className="text-gray-700">{libroData.descripcion}</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-600">
-                <p><strong>Autor:</strong> {libroData.author}</p>
+                <p><strong>Autor:</strong> {libroData.autor || libroData.author || "Autor desconocido"}</p>
                 <p><strong>Año de publicación:</strong> {libroData.año_publicacion}</p>
                 <p><strong>Precio:</strong> ${libroData.precio}</p>
                 <p><strong>ISBN:</strong> {libroData.isbn}</p>
