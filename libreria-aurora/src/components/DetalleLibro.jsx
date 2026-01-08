@@ -126,7 +126,14 @@ function DetalleLibro() {
             </div>
             <div className="md:w-2/3 p-6 space-y-4">
               <h1 className="text-2xl font-bold text-gray-800">{libroData.titulo}</h1>
-              <p className="text-gray-700">{libroData.descripcion}</p>
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-[#2B388C] uppercase tracking-wide">
+                  Descripción
+                </p>
+                <div className="text-gray-700 leading-relaxed bg-gray-50 rounded-xl p-4 max-h-56 overflow-y-auto shadow-inner">
+                  {libroData.descripcion || "Sin descripción disponible."}
+                </div>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-600">
                 <p><strong>Autor:</strong> {libroData.autor || libroData.author || "Autor desconocido"}</p>
                 <p><strong>Año de publicación:</strong> {libroData.año_publicacion}</p>
