@@ -267,6 +267,7 @@ function Catalogo() {
           {filteredBooks.length > 0 ? (
             filteredBooks.map((book) => (
               <BookCard
+                key={book.id || book.isbn || book.titulo}
                 book={book}
                 color="white"
               />
