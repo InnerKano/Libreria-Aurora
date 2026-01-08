@@ -52,6 +52,13 @@ if ENVIRONMENT is None:
     ENVIRONMENT = 'production' if not DEBUG else 'development'
 ENVIRONMENT = str(ENVIRONMENT).strip().lower()
 
+# Frontend base URLs (used when building transactional links)
+FRONTEND_URL_LOCAL = env('FRONTEND_URL_LOCAL').rstrip('/')
+FRONTEND_URL_PROD = env('FRONTEND_URL_PROD').rstrip('/')
+FRONTEND_BASE_URL = FRONTEND_URL_LOCAL if ENVIRONMENT == 'development' else FRONTEND_URL_PROD
+RESET_PASSWORD_PATH = '/#/reset-password'
+FRONTEND_RESET_PASSWORD_URL = f"{FRONTEND_BASE_URL}{RESET_PASSWORD_PATH}"
+
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
 

@@ -5,6 +5,7 @@ from rest_framework.decorators import action
 from django.contrib.auth import get_user_model
 from rest_framework.permissions import AllowAny
 from django.core.mail import send_mail
+from django.conf import settings
 import logging
 from smtplib import SMTPException
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
@@ -133,7 +134,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             )
         ]
     )
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], url_path='cambiar_contraseña')
     def cambiar_contraseña(self, request, pk=None):
         usuario = self.get_object()
         serializer = CambioContraseñaSerializer(data=request.data)
@@ -183,7 +184,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             )
         ]
     )
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post'], url_path='recuperar_contraseña')
     def recuperar_contraseña(self, request):
         email = request.data.get('email')
         
@@ -208,9 +209,8 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             token_obj = TokenRecuperacionPassword.generar_token(usuario)
             token = token_obj.token
             
-            # Enviar email con el token
-            frontend_url = "https://pausa11.github.io/LIbreria-Aurora/#/reset-password"
-            reset_url = f"{frontend_url}?token={token}"
+            # Enviar email con el token apuntando al frontend correcto según entorno
+            reset_url = f"{settings.FRONTEND_RESET_PASSWORD_URL}?{urlencode({'token': token})}"
             
             # Construir mensaje de correo
             mensaje = f"""
@@ -275,7 +275,7 @@ El equipo de Librería Aurora
             )
         ]
     )
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post'], url_path='validar_token')
     def validar_token(self, request):
         serializer = self.get_serializer(data=request.data)
         
@@ -306,7 +306,7 @@ El equipo de Librería Aurora
             )
         ]
     )
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post'], url_path='restablecer_contraseña')
     def restablecer_contraseña(self, request):
         serializer = self.get_serializer(data=request.data)
         
@@ -368,7 +368,7 @@ El equipo de Librería Aurora
             )
         ]
     )
-    @action(detail=False, methods=['put', 'patch'])
+    @action(detail=False, methods=['put', 'patch'], url_path='actualizar_perfil')
     def actualizar_perfil(self, request):
         usuario = request.user
         serializer = self.get_serializer(usuario, data=request.data, partial=True)
@@ -398,7 +398,7 @@ El equipo de Librería Aurora
             404: {"description": "Imagen no encontrada"}
         }
     )
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], url_path='obtener_imagen_perfil')
     def obtener_imagen_perfil(self, request):
         """
         Devuelve la URL de la imagen de perfil del usuario autenticado.
@@ -422,7 +422,7 @@ El equipo de Librería Aurora
             404: {"description": "Preferencias no encontradas"}
         }
     )
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], url_path='preferencias_suscripcion')
     def preferencias_suscripcion(self, request):
         """
         Obtiene las preferencias de suscripción del usuario autenticado.
@@ -453,7 +453,7 @@ El equipo de Librería Aurora
             )
         ]
     )
-    @action(detail=False, methods=['put', 'patch'])
+    @action(detail=False, methods=['put', 'patch'], url_path='actualizar_preferencias')
     def actualizar_preferencias(self, request):
         """
         Actualiza las preferencias de suscripción del usuario autenticado.
@@ -485,7 +485,7 @@ El equipo de Librería Aurora
             )
         ]
     )
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post'], url_path='agregar_preferencia')
     def agregar_preferencia(self, request):
         """
         Agrega una preferencia a la lista de preferencias del usuario autenticado.
@@ -517,7 +517,7 @@ El equipo de Librería Aurora
             )
         ]
     )
-    @action(detail=False, methods=['delete'])
+    @action(detail=False, methods=['delete'], url_path='eliminar_preferencia')
     def eliminar_preferencia(self, request):
         """
         Elimina una preferencia de la lista de preferencias del usuario autenticado.
