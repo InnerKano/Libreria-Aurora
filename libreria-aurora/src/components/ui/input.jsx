@@ -64,7 +64,7 @@ function Input({ type, placeholder, value, onChange, name, min = undefined, max=
         onFocus={handleFocus}
         onKeyDown={handleKeyDown}
       />
-      <style jsx>{` /* Neutralizar estilos de autocompletado */ input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus, input:-webkit-autofill:active { transition: background-color 9999s ease-in-out 0s; -webkit-text-fill-color: inherit !important; -webkit-box-shadow: 0 0 0 1000px transparent inset !important; background-clip: content-box !important; } /* Para Firefox */ @-moz-document url-prefix() { input:-moz-autofill, input:-moz-autofill:focus { transition: background-color 9999s ease-in-out 0s; -moz-text-fill-color: inherit !important; } } `}</style>
+      <style>{` /* Neutralizar estilos de autocompletado */ input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus, input:-webkit-autofill:active { transition: background-color 9999s ease-in-out 0s; -webkit-text-fill-color: inherit !important; -webkit-box-shadow: 0 0 0 1000px transparent inset !important; background-clip: content-box !important; } /* Para Firefox */ @-moz-document url-prefix() { input:-moz-autofill, input:-moz-autofill:focus { transition: background-color 9999s ease-in-out 0s; -moz-text-fill-color: inherit !important; } } `}</style>
     </div>
   );
 }
