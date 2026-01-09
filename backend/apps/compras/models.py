@@ -61,45 +61,49 @@ class Carrito(models.Model):
         return CarritoLibro.objects.filter(carrito=self).all()
     
     def pagar(self):
-        """Método para implementar la funcionalidad de pago"""
-        # Esta es una implementación básica que se expandirá más adelante
-        total = CarritoLibro.objects.filter(carrito=self).aggregate(total=models.Sum('libro__precio'))['total'] * CarritoLibro.objects.filter(carrito=self).aggregate(total=models.Sum('cantidad'))['total']
-        total_libros = CarritoLibro.objects.filter(carrito=self).aggregate(total=models.Sum('cantidad'))['total']
-        if total is None:
+        """Procesa el pago del carrito con los importes correctos por libro."""
+        items = list(CarritoLibro.objects.filter(carrito=self).select_related('libro'))
+        if not items:
             return {
                 "estado": "error",
                 "mensaje": "El carrito está vacío."
             }
+
+        total = sum(item.libro.precio * item.cantidad for item in items)
+        total_libros = sum(item.cantidad for item in items)
+
         saldo = Saldo.objects.get(usuario=self.usuario)
         if saldo.mostrar_saldo() < total:
             return {
                 "estado": "error",
                 "mensaje": "Saldo insuficiente para realizar la compra."
             }
-        else:
-            for carrito_libro in CarritoLibro.objects.filter(carrito=self):
-                if carrito_libro.libro.stock >= carrito_libro.cantidad:
-                    carrito_libro.libro.stock -= carrito_libro.cantidad
-                    carrito_libro.libro.save()
-                else:
-                    return {
-                        "estado": "error",
-                        "mensaje": f"El libro {carrito_libro.libro.titulo} no tiene suficiente stock."
-                    }
-            pedido = Pedidos.objects.create(usuario=self.usuario, estado='Pendiente', fecha=timezone.now())
-            for carrito_libro in CarritoLibro.objects.filter(carrito=self):
-                PedidoLibro.objects.create(
-                    pedido=pedido,
-                    libro=carrito_libro.libro,
-                    cantidad=carrito_libro.cantidad
-                )
-            saldo.descontar_saldo(total)
-            self.limpiar_carrito()
-            return {
-                "estado": "exito",
-                "total": total,
-                "mensaje": f"Procesando pago de ${total} para {total_libros} libros"
-            }
+
+        for carrito_libro in items:
+            if carrito_libro.libro.stock >= carrito_libro.cantidad:
+                carrito_libro.libro.stock -= carrito_libro.cantidad
+                carrito_libro.libro.save()
+            else:
+                return {
+                    "estado": "error",
+                    "mensaje": f"El libro {carrito_libro.libro.titulo} no tiene suficiente stock."
+                }
+
+        pedido = Pedidos.objects.create(usuario=self.usuario, estado='Pendiente', fecha=timezone.now())
+        for carrito_libro in items:
+            PedidoLibro.objects.create(
+                pedido=pedido,
+                libro=carrito_libro.libro,
+                cantidad=carrito_libro.cantidad
+            )
+
+        saldo.descontar_saldo(total)
+        self.limpiar_carrito()
+        return {
+            "estado": "exito",
+            "total": total,
+            "mensaje": f"Procesando pago de ${total} para {total_libros} libros"
+        }
 
 def default_expiracion():
     return timezone.now() + timedelta(days=1)
