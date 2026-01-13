@@ -8,3 +8,7 @@ backend/.env
 __pycache__/
 *.py[cod]
 *.pyo
+
+# Agent LLM / Vector DB artifacts (generated)
+/backend/agent/vector_db/
+/backend/agent/vector_db.zip

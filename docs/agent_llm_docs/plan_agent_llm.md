@@ -59,6 +59,7 @@
 	- Documento: nombre, autor, categoría, sinopsis corta, precio, disponibilidad, `libro_id`.
 	- Metadata para filtros: categoría, idioma, disponibilidad, precio.
 - Adaptar el notebook [docs/reference_docs/colab_vector_db.ipynb](docs/reference_docs/colab_vector_db.ipynb) a un script reproducible local `backend/apps/libros/scripts/build_vector_db.py`:
+	- Adaptar el notebook [docs/reference_docs/colab_vector_db.ipynb](docs/reference_docs/colab_vector_db.ipynb) a un notebook reproducible local **centralizado** en `backend/agent/notebooks/build_vector_db.ipynb`:
 	- Entrada: CSV/JSON exportado del catálogo.
 	- Salida: carpeta `vector_db/` versionada (manifest con modelo, fecha, count).
 	- Smoke test: `similarity_search("Cien años de soledad")` devuelve hits plausibles.

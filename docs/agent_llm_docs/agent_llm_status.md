@@ -8,10 +8,18 @@
 - Contrato de respuesta definido en plan: campos `message`, `results[]`, `actions[]`, `trace`, `error`.
 
 ## Pendientes inmediatos
-- Crear manifiesto inicial para embeddings (`vector_db/manifest.json`) cuando se genere el primer índice.
-- Implementar script `backend/apps/libros/scripts/build_vector_db.py` (adaptado del notebook) y smoke test de retrieval.
+- [COMPLETADO] Vector DB + manifest generados con notebook (Colab/local):
+	- Notebook: `backend/agent/notebooks/build_vector_db.ipynb`
+	- Artefacto: `backend/agent/vector_db/` (incluye `chroma.sqlite3` + segmentos)
+	- Manifest: `backend/agent/vector_db/manifest.json`
+	- Export: `backend/agent/vector_db.zip` (incluye la carpeta `vector_db/` con el manifest dentro)
 - Implementar `backend/apps/agent/llm_factory.py` con selección por env, timeouts, BYO key opcional y stub para tests.
 - Documentar el contrato en drf-spectacular y habilitar endpoint `/api/agent/` (mock de LLM para E2E básico).
+
+## Cómo reproducir el build (resumen)
+- Local: correr el notebook y dejar `DO_CLONE_REPO=False`, `DO_INSTALL_DEPS=False` (si tu venv ya está listo).
+- Colab: setear `DO_CLONE_REPO=True` + `DO_INSTALL_DEPS=True`, correr todo, y descargar `backend/agent/vector_db.zip`.
+- Dataset alternativo: usar `VECTOR_DATASET_PATH` para apuntar a un JSON genérico (lista con `text`/`page_content` + opcional `id`/`metadata`).
 
 ## Notas de operación
 - Si falla el vector DB, responder en modo degradado (búsqueda exacta + flag `degraded=true`).
