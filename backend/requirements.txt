@@ -23,8 +23,8 @@ qrcode>=0.18.0
 # --- Agent LLM / Vector DB (Chroma) ---
 # Used by notebooks/scripts under backend/agent/ to build and query the semantic index.
 # Uncomment these lines if you plan to use the vector DB functionality.
-#chromadb>=0.5.0
+chromadb>=0.5.0
 #langchain-chroma>=0.1.0
 #langchain-huggingface>=0.0.3
-#sentence-transformers>=2.7.0
+sentence-transformers>=2.7.0
 

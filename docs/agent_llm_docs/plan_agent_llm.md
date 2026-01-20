@@ -40,7 +40,13 @@
 ## Plan por fases
 
 ### Decisiones de ubicación y contratos (añadidos)
-- Ubicación del agente: alojarlo en una app dedicada (`backend/apps/agent` o dentro de `apps/recomendaciones`) para aislar lógica de orquestación y tools.
+- Ubicación del agente:
+	- Core reusable (código/tools/vector helpers): `backend/agent/`
+	- Integración Django/DRF (wiring): `backend/apps/agent_api/` (nombre elegido para evitar colisión con el paquete core `backend/agent`)
+- Tests del feature:
+	- Unit (core, sin HTTP): `backend/agent/tests/`
+	- Integración (API/wiring): `backend/apps/agent_api/tests/`
+- Documento guía de estructura (qué va en cada carpeta): `docs/agent_llm_docs/agent_llm_structure.md`.
 - Regla obligatoria: artefactos y scripts del agente se concentran en `backend/agent/` (incluye `vector_db/`, manifests, scripts de build y helpers).
 - Contrato de respuesta (salida del endpoint): objeto JSON con campos obligatorios `message: str`, `results: list[dict]`, `actions: list[dict]`, `trace: list|dict (opcional para debugging)`, `error: str (opcional, mutuamente excluyente con results útiles)`. Documentar en drf-spectacular.
 - Manifest de embeddings: registrar en `vector_db/manifest.json` el modelo, normalización (cosine), fecha de build, tamaño de la colección, campos embeddeados y hash del dataset.
@@ -93,7 +99,7 @@
 	- Acciones mutables requieren `user_id` autenticado; si falta, responder con requerimiento de login.
 	- Límites de tokens/respuestas para evitar derrapes; incluir trazas de tool-calls en logs.
 	- El asistente debe usar retrieval primero; si retrieval falla, informar modo degradado y evitar alucinaciones.
-- Fase 3B — LLM factory: implementar módulo `backend/apps/agent/llm_factory.py` (o similar) que resuelva proveedor/modelo desde env, timeouts/retries, soporte BYO key, y permita inyección de stub en tests. Tests unitarios para fallback de configuración y selección de provider.
+- Fase 3B — LLM factory: implementar módulo `backend/agent/llm_factory.py` (ya creado) y exponerlo vía wiring en `backend/apps/agent_api/` cuando se haga el endpoint conversacional. Tests unitarios para fallback de configuración y selección de provider.
 
 ### Fase 4 — Prompts y guardrails
 - Prompt base con: rol del asistente, dominios soportados, cosas que no debe inventar (precios/IDs), formato de respuesta JSON para el frontend.

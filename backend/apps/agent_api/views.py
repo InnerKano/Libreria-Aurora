@@ -1,0 +1,57 @@
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
+
+from agent.retrieval import search_catalog
+
+
+class AgentSearchView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        description=(
+            "Busqueda semantica (si vector DB esta disponible) con fallback a ORM. "
+            "Devuelve 'degraded=true' cuando se usa el fallback."  # noqa: E501
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="q",
+                type=OpenApiTypes.STR,
+                description="Consulta de texto (requerida)",
+                required=True,
+            ),
+            OpenApiParameter(
+                name="k",
+                type=OpenApiTypes.INT,
+                description="Cantidad de resultados (default: 5)",
+                required=False,
+            ),
+            OpenApiParameter(
+                name="prefer_vector",
+                type=OpenApiTypes.BOOL,
+                description="Si false, fuerza fallback ORM.",
+                required=False,
+            ),
+        ],
+        responses={200: OpenApiTypes.OBJECT},
+    )
+    def get(self, request):
+        q = request.query_params.get("q", "")
+        k = request.query_params.get("k", 5)
+        prefer_vector_raw = request.query_params.get("prefer_vector", "true")
+        prefer_vector = str(prefer_vector_raw).strip().lower() not in {"0", "false", "no"}
+
+        res = search_catalog(q, k=k, prefer_vector=prefer_vector)
+        return Response(
+            {
+                "query": res.query,
+                "k": res.k,
+                "source": res.source,
+                "degraded": res.degraded,
+                "warnings": res.warnings,
+                "results": res.results,
+            }
+        )

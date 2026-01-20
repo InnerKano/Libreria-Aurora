@@ -4,7 +4,10 @@
 - Definidas variables en backend/.env.example para LLM (provider, modelo, base_url, api_key, timeouts, modos de costo, BYO key) y Vector DB (dir, colección, manifest).
 - Default de desarrollo: `LLM_PROVIDER=openai_compatible`, `LLM_MODEL=llama-3-8b-instruct`, pensado para endpoint local compatible.
 - Dataset base: fixtures existentes `backend/apps/libros/fixtures/libros_prueba.json` como fuente inicial para build de Chroma.
-- Regla de ubicación: todo el feature del agente se centraliza en `backend/agent/` (código, scripts, vector_db, manifests). Se crearán helper(s) y orquestación en `backend/agent/` y, si se requiere app Django, `backend/apps/agent/` sólo para integrar con DRF/URLs.
+- Regla de ubicación: todo el feature del agente se centraliza en `backend/agent/` (core reusable: código, scripts, vector_db, manifests).
+	- Integración Django/DRF (wiring): `backend/apps/agent_api/`.
+	- Nota: el wiring NO se llama `apps.agent` porque colisiona con el paquete core `backend/agent` (importa como `agent.*`) y genera conflictos de imports/tests.
+	- Doc de estructura (qué va en cada carpeta): `docs/agent_llm_docs/agent_llm_structure.md`.
 - Contrato de respuesta definido en plan: campos `message`, `results[]`, `actions[]`, `trace`, `error`.
 
 ## Pendientes inmediatos
@@ -14,7 +17,14 @@
 	- Manifest: `backend/agent/vector_db/manifest.json`
 	- Export: `backend/agent/vector_db.zip` (incluye la carpeta `vector_db/` con el manifest dentro)
 - [COMPLETADO] Implementar `backend/agent/llm_factory.py` con selección por env, timeouts, BYO key opcional y stub para tests.
-- Documentar el contrato en drf-spectacular y habilitar endpoint `/api/agent/` (mock de LLM para E2E básico).
+- [COMPLETADO] Fase 2 (retrieval estable sin LLM):
+	- Loader/caché del vector store: `backend/agent/vector_store.py`
+	- Helper estable de búsqueda: `backend/agent/retrieval.py` (`search_catalog`)
+	- Tests (core): `backend/agent/tests/`
+	- Tests (API/wiring): `backend/apps/agent_api/tests/`
+	- Endpoint DRF: `/api/agent/search/` (wiring en `backend/apps/agent_api/`)
+
+- Pendiente: documentar el contrato final en drf-spectacular y habilitar endpoint `/api/agent/` (mock/LLM) para E2E.
 
 ## Actualización: `llm_factory` (responsable, modular, escalable)
 
@@ -100,3 +110,10 @@ Cómo correrlos (local):
 1) Generar y versionar el primer `vector_db` + manifest.
 2) Añadir helper de `vector_store` y API de retrieval determinística.
 3) Integrar LLM factory y endpoint `/api/agent/` con stub para pruebas.
+
+### Uso rápido (Fase 2)
+- Endpoint: `GET /api/agent/search/?q=<texto>&k=5&prefer_vector=true`
+	- Retorna `degraded=false` si pudo usar vector DB.
+	- Retorna `degraded=true` si cayó a ORM (por falta de dependencias o artefacto).
+- Dependencias para vector search en runtime:
+	- `chromadb` + `sentence-transformers` (ya quedaron habilitadas en `backend/requirements.txt`).

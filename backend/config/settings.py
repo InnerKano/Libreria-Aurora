@@ -90,6 +90,7 @@ INSTALLED_APPS = [
     'apps.finanzas',
     'apps.mensajeria',
     'apps.recomendaciones',
+    'apps.agent_api',
     'cloudinary_storage',
     'cloudinary',
 ]
