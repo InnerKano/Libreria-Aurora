@@ -26,6 +26,18 @@
 
 - Pendiente: documentar el contrato final en drf-spectacular y habilitar endpoint `/api/agent/` (mock/LLM) para E2E.
 
+## Actualización: endpoint conversacional mínimo `/api/agent/` (read-only)
+
+- [COMPLETADO] Endpoint `/api/agent/` (POST) habilitado vía wiring `backend/apps/agent_api/`.
+- Contrato estable (siempre presente):
+	- `message: str`
+	- `results: list[dict]`
+	- `actions: list[dict]`
+- Campos opcionales:
+	- `trace: dict` (si el request envía `trace=true`)
+	- `error: str` (cuando hay request inválido; el endpoint responde HTTP 400)
+- Fuente de verdad: `results` viene de retrieval; el LLM (si está configurado) solo redacta `message`.
+
 ## Actualización: `llm_factory` (responsable, modular, escalable)
 
 ### Objetivo (por qué existe)

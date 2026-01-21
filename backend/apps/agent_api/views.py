@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 
+from agent.agent_handler import handle_agent_message
 from agent.retrieval import search_catalog
 
 
@@ -55,3 +56,45 @@ class AgentSearchView(APIView):
                 "results": res.results,
             }
         )
+
+
+class AgentChatView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        description=(
+            "Endpoint conversacional del agente (read-only en esta iteración). "
+            "Usa retrieval como fuente de verdad y, opcionalmente, un LLM para redactar el mensaje. "
+            "Siempre devuelve un JSON estable con message/results/actions y opcionalmente trace/error."
+        ),
+        request=OpenApiTypes.OBJECT,
+        responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
+    )
+    def post(self, request):
+        data = request.data or {}
+        message = data.get("message")
+
+        k = data.get("k", 5)
+        prefer_vector = data.get("prefer_vector", True)
+        trace = data.get("trace", False)
+
+        # Normalize bool-ish values from JSON or strings.
+        if isinstance(prefer_vector, str):
+            prefer_vector = prefer_vector.strip().lower() not in {"0", "false", "no"}
+        if isinstance(trace, str):
+            trace = trace.strip().lower() in {"1", "true", "yes"}
+
+        try:
+            k_int = int(k)
+        except Exception:
+            k_int = 5
+
+        resp = handle_agent_message(
+            message,
+            k=k_int,
+            prefer_vector=bool(prefer_vector),
+            include_trace=bool(trace),
+        )
+
+        status_code = 400 if resp.error else 200
+        return Response(resp.to_dict(), status=status_code)
