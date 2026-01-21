@@ -150,80 +150,81 @@ Dado que se tratará de un proyecto modular, se recomienda separar el back-end y
 │           ├── fixtures/         # Datos semilla (usuarios_prueba.json)
 │           └── migrations/
 ├── docs/                         # Documentación complementaria
-│   ├── TECHNICAL_ARCHITECTURE.md # Presente documento
+│   ├── TECHNICAL_REFERENCE.md    # Referencia técnica vigente
 │   ├── readme.txt                # Notas informativas
-│   └── registro.md               # Registro de decisiones
+│   ├── registro.md               # Registro de decisiones
+│   └── agent_llm_docs/           # Recursos adicionales de agentes
 └── libreria-aurora/              # Proyecto React (frontend)
-    ├── .gitignore                # Reglas de exclusión frontend
-    ├── package.json              # Dependencias y scripts npm
-    ├── package-lock.json         # Versiones bloqueadas
-    ├── postcss.config.js         # Ajustes de PostCSS
-    ├── tailwind.config.js        # Configuración de Tailwind CSS
-    ├── README.md                 # Documentación del frontend
-    ├── node_modules/             # Dependencias instaladas
-    ├── public/                   # Recursos estáticos públicos
-    │   ├── favicon.ico
-    │   ├── index.html            # Contenedor HTML principal
-    │   ├── libro.ico             # Ícono alternativo
-    │   ├── logo192.png
-    │   ├── logo512.png
-    │   ├── manifest.json         # PWA manifest
-    │   └── robots.txt            # Política para buscadores
-    └── src/                      # Código fuente React
-        ├── api/                  # Configuración de cliente HTTP
-        │   └── config.js
-        ├── components/           # Componentes reutilizables
-        │   ├── book/             # Componentes de tarjetas de libros
-        │   │   ├── addTocCartButton.jsx
-        │   │   └── bookCard.jsx
-        │   ├── carrito.jsx
-        │   ├── catalogo.jsx
-        │   ├── DetalleLibro.jsx
-        │   ├── Home.jsx
-        │   ├── login.jsx
-        │   ├── miPerfil.jsx
-        │   ├── navBar.jsx
-        │   ├── profile/          # Paneles de perfil y administración
-        │   │   ├── addPaymentMethod.jsx
-        │   │   ├── adminForumMessages.jsx
-        │   │   ├── adminLibros.jsx
-        │   │   ├── ChangePassword.jsx
-        │   │   ├── editContentPreference.jsx
-        │   │   ├── editProfile.jsx
-        │   │   ├── financialManagement.jsx
-        │   │   ├── forumMessages.jsx
-        │   │   ├── gestionarTiendas.jsx
-        │   │   ├── handleNewsSubscription.jsx
-        │   │   ├── pedidos.jsx
-        │   │   └── reservas.jsx
-        │   ├── recuperarContraseña.jsx
-        │   ├── registro.jsx
-        │   ├── ResetPassword.jsx
-        │   ├── SearchBook.jsx
-        │   ├── Tiendas.jsx
-        │   └── ui/               # Componentes UI atómicos
-        │       ├── authFrame.jsx
-        │       ├── buttonA.jsx
-        │       ├── input.jsx
-        │       ├── LoadingSpinner.jsx
-        │       └── README.md
-        ├── hooks/                # Hooks personalizados
-        │   └── useIsStaff.js
-        ├── images/               # Activos gráficos
-        │   ├── Logo.jpg
-        │   └── Logo.svg
-        ├── utils/                # Utilidades compartidas
-        │   └── media.js
-        ├── App.js
-        ├── App.test.js
-        ├── index.css
-        ├── index.js
-        ├── logo.svg
-        ├── reportWebVitals.js
-        └── setupTests.js
-    ```
+  ├── .gitignore                # Reglas de exclusión frontend
+  ├── package.json              # Dependencias y scripts npm
+  ├── package-lock.json         # Versiones bloqueadas
+  ├── postcss.config.js         # Ajustes de PostCSS
+  ├── tailwind.config.js        # Configuración de Tailwind CSS
+  ├── README.md                 # Documentación del frontend
+  ├── node_modules/             # Dependencias instaladas
+  ├── public/                   # Recursos estáticos públicos
+  │   ├── favicon.ico
+  │   ├── index.html            # Contenedor HTML principal
+  │   ├── libro.ico             # Ícono alternativo
+  │   ├── logo192.png
+  │   ├── logo512.png
+  │   ├── manifest.json         # PWA manifest
+  │   └── robots.txt            # Política para buscadores
+  └── src/                      # Código fuente React
+    ├── api/                  # Configuración de cliente HTTP
+    │   └── config.js
+    ├── components/           # Componentes reutilizables
+    │   ├── book/             # Componentes de tarjetas de libros
+    │   │   ├── addTocCartButton.jsx
+    │   │   └── bookCard.jsx
+    │   ├── carrito.jsx
+    │   ├── catalogo.jsx
+    │   ├── DetalleLibro.jsx
+    │   ├── Home.jsx
+    │   ├── login.jsx
+    │   ├── miPerfil.jsx
+    │   ├── navBar.jsx
+    │   ├── profile/          # Paneles de perfil y administración
+    │   │   ├── addPaymentMethod.jsx
+    │   │   ├── adminForumMessages.jsx
+    │   │   ├── adminLibros.jsx
+    │   │   ├── ChangePassword.jsx
+    │   │   ├── editContentPreference.jsx
+    │   │   ├── editProfile.jsx
+    │   │   ├── financialManagement.jsx
+    │   │   ├── forumMessages.jsx
+    │   │   ├── gestionarTiendas.jsx
+    │   │   ├── handleNewsSubscription.jsx
+    │   │   ├── pedidos.jsx
+    │   │   └── reservas.jsx
+    │   ├── recuperarContraseña.jsx
+    │   ├── registro.jsx
+    │   ├── ResetPassword.jsx
+    │   ├── SearchBook.jsx
+    │   ├── Tiendas.jsx
+    │   └── ui/               # Componentes UI atómicos
+    │       ├── authFrame.jsx
+    │       ├── buttonA.jsx
+    │       ├── input.jsx
+    │       ├── LoadingSpinner.jsx
+    │       └── README.md
+    ├── hooks/                # Hooks personalizados
+    │   └── useIsStaff.js
+    ├── images/               # Activos gráficos
+    │   ├── Logo.jpg
+    │   └── Logo.svg
+    ├── utils/                # Utilidades compartidas
+    │   └── media.js
+    ├── App.js
+    ├── App.test.js
+    ├── index.css
+    ├── index.js
+    ├── logo.svg
+    ├── reportWebVitals.js
+    └── setupTests.js
+```
 
-    *Nota:* Python genera carpetas __pycache__/ en varias rutas; no concentran lógica propia y pueden regenerarse automáticamente.
+*Nota:* Python genera carpetas __pycache__/ en varias rutas; no concentran lógica propia y pueden regenerarse automáticamente.
 
 ### B. Organización Interna de cada App en Django
 
