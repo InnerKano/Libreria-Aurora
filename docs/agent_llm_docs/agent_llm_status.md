@@ -24,7 +24,8 @@
 	- Tests (API/wiring): `backend/apps/agent_api/tests/`
 	- Endpoint DRF: `/api/agent/search/` (wiring en `backend/apps/agent_api/`)
 
-- Pendiente: documentar el contrato final en drf-spectacular y habilitar endpoint `/api/agent/` (mock/LLM) para E2E.
+- [COMPLETADO] Documentar el contrato en drf-spectacular con ejemplos para `/api/agent/` y `/api/agent/search/`.
+- Pendiente: habilitar E2E (mock/LLM) con pruebas guiadas de chat.
 
 ## Actualización: endpoint conversacional mínimo `/api/agent/` (read-only)
 
@@ -37,6 +38,12 @@
 	- `trace: dict` (si el request envía `trace=true`)
 	- `error: str` (cuando hay request inválido; el endpoint responde HTTP 400)
 - Fuente de verdad: `results` viene de retrieval; el LLM (si está configurado) solo redacta `message`.
+
+## Actualización: Fase 5B — documentación en drf-spectacular
+
+- Se añadieron ejemplos de request/response (200/400) para `/api/agent/`.
+- Se añadieron ejemplos de respuesta (vector y fallback ORM) para `/api/agent/search/`.
+- La documentación refleja el contrato estable sin agregar tools mutables.
 
 ## Actualización: `llm_factory` (responsable, modular, escalable)
 

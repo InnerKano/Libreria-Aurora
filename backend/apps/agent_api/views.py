@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema
 
 from agent.agent_handler import handle_agent_message
 from agent.retrieval import search_catalog
@@ -37,7 +37,59 @@ class AgentSearchView(APIView):
                 required=False,
             ),
         ],
-        responses={200: OpenApiTypes.OBJECT},
+        responses={
+            200: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                examples=[
+                    OpenApiExample(
+                        "Respuesta 200 (vector)",
+                        value={
+                            "query": "Cien años de soledad",
+                            "k": 5,
+                            "source": "vector",
+                            "degraded": False,
+                            "warnings": [],
+                            "results": [
+                                {
+                                    "id": "libro_123",
+                                    "document": "Cien años de soledad...",
+                                    "metadata": {"libro_id": 123, "titulo": "Cien años de soledad"},
+                                    "distance": 0.12,
+                                }
+                            ],
+                        },
+                        response_only=True,
+                        status_codes=["200"],
+                    ),
+                    OpenApiExample(
+                        "Respuesta 200 (ORM degradado)",
+                        value={
+                            "query": "Cien años de soledad",
+                            "k": 5,
+                            "source": "orm",
+                            "degraded": True,
+                            "warnings": ["Vector store not available"],
+                            "results": [
+                                {
+                                    "libro_id": 123,
+                                    "titulo": "Cien años de soledad",
+                                    "autor": "Gabriel García Márquez",
+                                    "isbn": "9780307474728",
+                                    "precio": "19.99",
+                                    "categoria": "Novela",
+                                    "stock": 4,
+                                    "editorial": "Sudamericana",
+                                    "año_publicacion": 1967,
+                                    "descripcion": "...",
+                                }
+                            ],
+                        },
+                        response_only=True,
+                        status_codes=["200"],
+                    ),
+                ],
+            )
+        },
     )
     def get(self, request):
         q = request.query_params.get("q", "")
@@ -68,7 +120,75 @@ class AgentChatView(APIView):
             "Siempre devuelve un JSON estable con message/results/actions y opcionalmente trace/error."
         ),
         request=OpenApiTypes.OBJECT,
-        responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
+        examples=[
+            OpenApiExample(
+                "Request ejemplo",
+                value={
+                    "message": "Busco novelas de realismo mágico",
+                    "k": 5,
+                    "prefer_vector": True,
+                    "trace": True,
+                },
+                request_only=True,
+            )
+        ],
+        responses={
+            200: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                examples=[
+                    OpenApiExample(
+                        "Respuesta 200",
+                        value={
+                            "message": "Encontré 2 resultados. ¿Quieres ver detalles o filtrar por autor?",
+                            "results": [
+                                {
+                                    "libro_id": 123,
+                                    "titulo": "Cien años de soledad",
+                                    "autor": "Gabriel García Márquez",
+                                    "isbn": "9780307474728",
+                                    "precio": "19.99",
+                                    "categoria": "Novela",
+                                    "stock": 4,
+                                }
+                            ],
+                            "actions": [
+                                {"type": "view_book", "libro_id": 123},
+                                {
+                                    "type": "refine_search",
+                                    "hint": "Puedes pedirme filtrar por autor, ISBN o categoría.",
+                                },
+                            ],
+                            "trace": {
+                                "query": "novelas de realismo mágico",
+                                "k": 5,
+                                "source": "orm",
+                                "degraded": True,
+                                "warnings": ["Vector store not available"],
+                                "llm": {"provider": "stub", "model": "stub", "latency_ms": 3, "error": None},
+                            },
+                        },
+                        response_only=True,
+                        status_codes=["200"],
+                    )
+                ],
+            ),
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                examples=[
+                    OpenApiExample(
+                        "Respuesta 400 (request invalido)",
+                        value={
+                            "message": "Mensaje vacío. Escribe qué libro buscas.",
+                            "results": [],
+                            "actions": [],
+                            "error": "invalid_request",
+                        },
+                        response_only=True,
+                        status_codes=["400"],
+                    )
+                ],
+            ),
+        },
     )
     def post(self, request):
         data = request.data or {}

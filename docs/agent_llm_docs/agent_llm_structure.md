@@ -178,6 +178,7 @@ Esto reduce flakiness: la lógica del core no depende de Django request lifecycl
 
 - Si documentas con drf-spectacular:
 	- Mantén el schema del endpoint estable y agrega ejemplos (request/response) sin cambiar campos.
+	- Los ejemplos del schema viven en `backend/apps/agent_api/views.py` dentro de los decoradores `@extend_schema`.
 
 - Si agregas tools mutables:
 	- No las llames desde el LLM “en crudo”.

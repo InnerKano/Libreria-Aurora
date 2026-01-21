@@ -54,3 +54,32 @@ def test_agent_chat_endpoint_returns_400_on_invalid_request(monkeypatch):
     assert response.data["error"] == "invalid_request"
     assert response.data["results"] == []
     assert response.data["actions"] == []
+
+
+def test_agent_chat_trace_flag_parsing(monkeypatch):
+    captured: dict = {}
+
+    def fake_handle_agent_message(message, **kwargs):
+        captured["include_trace"] = kwargs.get("include_trace")
+
+        class Resp:
+            error = None
+
+            def to_dict(self):
+                return {
+                    "message": "ok",
+                    "results": [],
+                    "actions": [],
+                    "trace": {"ok": True},
+                }
+
+        return Resp()
+
+    monkeypatch.setattr("apps.agent_api.views.handle_agent_message", fake_handle_agent_message)
+
+    factory = APIRequestFactory()
+    request = factory.post("/api/agent/", {"message": "hola", "trace": "true"}, format="json")
+    response = AgentChatView.as_view()(request)
+
+    assert response.status_code == 200
+    assert captured["include_trace"] is True

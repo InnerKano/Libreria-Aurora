@@ -61,6 +61,45 @@
 - qrcode para devoluciones; BytesIO para adjuntos.
 - psycopg2 como driver PostgreSQL; django-environ para carga de variables.
 
+### Feature Agente LLM (Fase 5) — arquitectura y mantenimiento
+
+**Por qué existe**
+- Añadir un asistente conversacional sin romper contratos existentes ni introducir operaciones mutables en esta fase.
+- Mantener el catálogo como **fuente de verdad** y evitar alucinaciones (el LLM solo redacta).
+
+**Qué incluye (alcance de Fase 5)**
+- Endpoint conversacional read-only: `POST /api/agent/`.
+- Endpoint de búsqueda directa: `GET /api/agent/search/`.
+- Documentación OpenAPI con ejemplos en drf-spectacular.
+
+**Dónde vive (responsabilidades claras)**
+- Core reutilizable (sin Django/DRF): `backend/agent/`
+   - Orquestación: `agent_handler.py`.
+   - Retrieval: `retrieval.py` (vector + fallback ORM).
+   - LLM factory: `llm_factory.py` (stub/compatible, timeouts, BYO).
+- Wiring DRF: `backend/apps/agent_api/`
+   - Endpoints: `views.py`.
+   - Rutas: `urls.py`.
+
+**Contrato estable (para frontend y mantenimiento)**
+- Respuesta siempre con `message`, `results`, `actions`.
+- Campos opcionales: `trace` (solo si se solicita), `error` (HTTP 400).
+- `results` proviene **siempre** de retrieval (vector/ORM); el LLM no toca BD.
+
+**Documentación del schema (drf-spectacular)**
+- Se define en [backend/apps/agent_api/views.py](backend/apps/agent_api/views.py) con `@extend_schema`.
+- Aquí se actualizan ejemplos de request/response y el contrato del endpoint.
+
+**Seguridad y escalabilidad (decisiones de diseño)**
+- Fase 5 es read-only: no requiere JWT para llamar, evita efectos secundarios.
+- Tools mutables (carrito/reservas) se habilitarán en fases futuras con JWT y validación estricta.
+- La separación `agent_api → agent` evita acoplamiento y facilita pruebas unitarias sin HTTP.
+
+**Pruebas**
+- Core (sin HTTP): `backend/agent/tests/`.
+- API/wiring: `backend/apps/agent_api/tests/`.
+- Las pruebas actuales cubren contrato del chat y búsqueda, y parsing de flags (`trace`).
+
 ## Frontend React
 ### Arquitectura
 - **Stack:** React 18 con react-router-dom (HashRouter) para routing integramente del lado del cliente; Tailwind opcional con PostCSS.
