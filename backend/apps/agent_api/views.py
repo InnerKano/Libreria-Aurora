@@ -139,7 +139,7 @@ class AgentChatView(APIView):
                     OpenApiExample(
                         "Respuesta 200",
                         value={
-                            "message": "Encontré 2 resultados. ¿Quieres ver detalles o filtrar por autor?",
+                            "message": "- Encontré 2 resultados.\n- ¿Quieres ver detalles o filtrar por autor?",
                             "results": [
                                 {
                                     "libro_id": 123,

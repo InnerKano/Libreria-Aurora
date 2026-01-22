@@ -61,12 +61,12 @@ def test_handle_agent_message_uses_llm_for_message_but_keeps_results_from_retrie
         prefer_vector=True,
         include_trace=True,
         retrieval_fn=fake_retrieval,  # type: ignore[arg-type]
-        llm=FakeLLM("Hola, aquí tienes resultados"),
+        llm=FakeLLM("- Hola, aquí tienes resultados\n- ¿Quieres ver detalles?"),
     )
 
     payload = resp.to_dict()
     assert payload["error"] is None if "error" in payload else True
-    assert payload["message"] == "Hola, aquí tienes resultados"
+    assert payload["message"] == "- Hola, aquí tienes resultados\n- ¿Quieres ver detalles?"
     assert payload["results"][0]["libro_id"] == 123
     assert payload["actions"][0]["type"] == "view_book"
     assert payload["trace"]["degraded"] is True
@@ -99,6 +99,29 @@ def test_handle_agent_message_llm_failure_falls_back_to_template():
     assert payload["results"]
 
 
+def test_handle_agent_message_guardrails_rejects_invalid_llm_message():
+    def fake_retrieval(query: str, *, k: int = 5, prefer_vector: bool = True):
+        return FakeRetrievalResult(
+            query=query,
+            k=k,
+            source="orm",
+            degraded=True,
+            results=[{"libro_id": 1, "titulo": "A"}],
+            warnings=[],
+        )
+
+    resp = handle_agent_message(
+        "algo",
+        include_trace=False,
+        retrieval_fn=fake_retrieval,  # type: ignore[arg-type]
+        llm=FakeLLM("Respuesta sin bullets"),
+    )
+
+    payload = resp.to_dict()
+    assert "Encontré" in payload["message"] or "Encontre" in payload["message"]
+    assert payload["results"]
+
+
 @pytest.mark.parametrize(
     "results", [[], [{"libro_id": 10, "titulo": "A"}], [{"id": "x"}]],
 )
@@ -117,7 +140,7 @@ def test_actions_are_safe_and_optional(results):
         "algo",
         include_trace=False,
         retrieval_fn=fake_retrieval,  # type: ignore[arg-type]
-        llm=FakeLLM("ok"),
+        llm=FakeLLM("- ok\n- ok"),
     )
 
     payload = resp.to_dict()
@@ -155,7 +178,7 @@ def test_handle_agent_message_uses_lookup_tool_when_id_present(monkeypatch):
         "ver libro 123",
         include_trace=True,
         retrieval_fn=fake_retrieval,  # type: ignore[arg-type]
-        llm=FakeLLM("ok"),
+        llm=FakeLLM("- ok\n- ok"),
     )
 
     payload = resp.to_dict()

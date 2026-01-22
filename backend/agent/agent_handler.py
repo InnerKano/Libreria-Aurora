@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from django.core.exceptions import ImproperlyConfigured
 
+from .guardrails import validate_llm_message
 from .llm_factory import build_llm_runnable
+from .prompts import build_llm_prompt
 from .retrieval import RetrievalResult, search_catalog
 from .tools import tool_filter_catalog, tool_lookup_book
 
@@ -67,33 +68,6 @@ def _build_fallback_message(*, query: str, results_count: int, degraded: bool, w
     if degraded:
         base += "\n\nNota: el buscador semántico no estaba disponible, así que usé búsqueda exacta."
     return base
-
-
-def _build_llm_prompt(*, user_message: str, retrieval: RetrievalResult) -> str:
-    safe_results = retrieval.results[:5]
-
-    instruction = (
-        "Eres un asistente para una librería.\n"
-        "Reglas: NO inventes precios/IDs/stock.\n"
-        "Usa únicamente los resultados provistos (si no hay, dilo).\n"
-        "Responde en español, conciso, con 2-5 bullets máximo.\n"
-    )
-
-    context = {
-        "query": retrieval.query,
-        "degraded": retrieval.degraded,
-        "source": retrieval.source,
-        "results": safe_results,
-    }
-
-    return (
-        instruction
-        + "\nMensaje del usuario:\n"
-        + user_message
-        + "\n\nContexto de búsqueda (JSON):\n"
-        + json.dumps(context, ensure_ascii=False)
-        + "\n"
-    )
 
 
 def _extract_book_id(message: str) -> Optional[int]:
@@ -227,7 +201,7 @@ def handle_agent_message(
 
     try:
         runnable = llm or build_llm_runnable(byo_api_key=byo_api_key)
-        prompt = _build_llm_prompt(user_message=cleaned, retrieval=retrieval)
+        prompt = build_llm_prompt(user_message=cleaned, retrieval=retrieval)
         llm_resp = runnable.invoke(prompt)
         final_message = (llm_resp or {}).get("content") or ""
         llm_meta = {
@@ -236,8 +210,9 @@ def handle_agent_message(
             "latency_ms": (llm_resp or {}).get("latency_ms"),
             "error": (llm_resp or {}).get("error"),
         }
-        if final_message.strip() == "":
-            raise RuntimeError("LLM returned empty content")
+        guard = validate_llm_message(final_message)
+        if not guard.ok:
+            raise RuntimeError(f"LLM guardrails failed: {','.join(guard.errors)}")
     except ImproperlyConfigured as e:
         final_message = _build_fallback_message(
             query=retrieval.query,

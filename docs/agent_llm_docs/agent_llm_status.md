@@ -53,6 +53,13 @@
 	- `backend/agent/tests/test_tools.py`
 	- Ampliación en `backend/agent/tests/test_agent_handler.py`
 
+## Actualización: Fase 4 — prompts y guardrails
+
+- [COMPLETADO] Prompt base y few-shots centralizados en `backend/agent/prompts.py`.
+- [COMPLETADO] Guardrails de contenido/longitud en `backend/agent/guardrails.py`.
+- [COMPLETADO] Integración en `handle_agent_message` con fallback seguro cuando el LLM incumple reglas.
+- [COMPLETADO] Test adicional para validar rechazo por guardrails.
+
 ## Actualización: Fase 5B — documentación en drf-spectacular
 
 - Se añadieron ejemplos de request/response (200/400) para `/api/agent/`.

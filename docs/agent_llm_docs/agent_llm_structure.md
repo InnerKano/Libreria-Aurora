@@ -158,6 +158,56 @@ Regla importante:
 
 ---
 
+# Implementación actual (Fase 4): prompts y guardrails (core)
+
+Esta sección documenta **dónde vive la lógica de prompt/validación**, por qué existe y cómo se integra de forma responsable.
+
+## Objetivo (por qué existe)
+
+- Asegurar que el LLM **no invente datos** ni rompa el contrato del endpoint.
+- Mantener la **redacción del LLM controlada** (longitud, formato con bullets, idioma).
+- Evitar que el frontend reciba salidas inesperadas (JSON, bloques de código).
+
+## Dónde vive (qué archivos)
+
+- Prompt base y few-shots:
+	- `backend/agent/prompts.py`
+		- `PromptConfig` (límites configurables)
+		- `build_llm_prompt(...)` (construye el prompt con contexto de retrieval)
+- Guardrails de salida:
+	- `backend/agent/guardrails.py`
+		- `validate_llm_message(...)` (valida longitud, formato y estilo)
+		- `GuardrailResult` (ok + errores legibles)
+- Integración en el handler:
+	- `backend/agent/agent_handler.py`
+		- Usa `build_llm_prompt(...)` antes de llamar al LLM.
+		- Valida el `message` del LLM con `validate_llm_message(...)`.
+		- Si falla: se activa el fallback determinista (`_build_fallback_message`).
+
+## Responsabilidades (cómo se integra)
+
+1) `handle_agent_message` arma el prompt con `build_llm_prompt`.
+2) El LLM redacta **solo** el campo `message`.
+3) `validate_llm_message` asegura límites de formato:
+	- Longitud máxima.
+	- Presencia de bullets.
+	- Prohibición de JSON o bloques de código.
+4) Si el mensaje es inválido, **no se rompe el contrato**: se usa fallback.
+
+## Por qué esto es escalable
+
+- `PromptConfig` permite evolucionar límites sin tocar el handler.
+- `validate_llm_message` es reusable si se añaden más endpoints o formatos.
+- Se puede incorporar guardrails más estrictos (por ejemplo, detección de idioma) sin modificar el wiring DRF.
+
+## Tests (dónde se valida)
+
+- `backend/agent/tests/test_agent_handler.py`
+	- Verifica que el handler haga fallback si el LLM no respeta guardrails.
+	- Mantiene el contrato estable aunque el LLM falle.
+
+---
+
 # Implementación actual (Fase 3): tools read-only (core)
 
 Esta sección documenta **cómo está estructurada** la Fase 3 (tools) y **cómo se integra** con el handler, para que sea mantenible y escalable antes de avanzar a Fase 4 (prompts/guardrails).
