@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
@@ -8,6 +9,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 from .llm_factory import build_llm_runnable
 from .retrieval import RetrievalResult, search_catalog
+from .tools import tool_filter_catalog, tool_lookup_book
 
 
 @dataclass(frozen=True)
@@ -94,6 +96,60 @@ def _build_llm_prompt(*, user_message: str, retrieval: RetrievalResult) -> str:
     )
 
 
+def _extract_book_id(message: str) -> Optional[int]:
+    match = re.search(r"\b(?:libro|id)\s*(\d+)\b", message, re.IGNORECASE)
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except Exception:
+        return None
+
+
+def _extract_isbn(message: str) -> Optional[str]:
+    match = re.search(r"\bisbn\s*[:=]?\s*([0-9Xx-]{10,17})\b", message)
+    if not match:
+        return None
+    raw = match.group(1)
+    cleaned = re.sub(r"[^0-9Xx]", "", raw)
+    return cleaned or None
+
+
+def _extract_filters(message: str) -> dict[str, Any]:
+    filters: dict[str, Any] = {}
+
+    def _capture(pattern: str) -> Optional[str]:
+        m = re.search(pattern, message, re.IGNORECASE)
+        return m.group(1).strip() if m else None
+
+    categoria = _capture(r"\bcategoria\s*[:=]\s*([^,;\n]+)")
+    if categoria:
+        filters["categoria"] = categoria
+
+    autor = _capture(r"\bautor\s*[:=]\s*([^,;\n]+)")
+    if autor:
+        filters["autor"] = autor
+
+    editorial = _capture(r"\beditorial\s*[:=]\s*([^,;\n]+)")
+    if editorial:
+        filters["editorial"] = editorial
+
+    precio_min = _capture(r"\bprecio_min\s*[:=]\s*([0-9]+(?:\.[0-9]+)?)")
+    if precio_min is not None:
+        filters["precio_min"] = precio_min
+
+    precio_max = _capture(r"\bprecio_max\s*[:=]\s*([0-9]+(?:\.[0-9]+)?)")
+    if precio_max is not None:
+        filters["precio_max"] = precio_max
+
+    if re.search(r"\bdisponible\b", message, re.IGNORECASE):
+        filters["disponible"] = True
+    if re.search(r"\bagotado\b", message, re.IGNORECASE):
+        filters["disponible"] = False
+
+    return filters
+
+
 def handle_agent_message(
     message: Optional[str],
     *,
@@ -128,7 +184,42 @@ def handle_agent_message(
         )
 
     retrieval_fn = retrieval_fn or search_catalog
-    retrieval = retrieval_fn(cleaned, k=k, prefer_vector=prefer_vector)
+    retrieval: RetrievalResult
+    tool_meta: Optional[dict[str, Any]] = None
+
+    book_id = _extract_book_id(cleaned)
+    isbn = _extract_isbn(cleaned)
+
+    if book_id is not None or isbn is not None:
+        lookup = tool_lookup_book(book_id=book_id, isbn=isbn)
+        if lookup.ok and lookup.data and lookup.data.get("results"):
+            retrieval = RetrievalResult(
+                query=cleaned,
+                k=1,
+                source="orm",
+                degraded=True,
+                results=lookup.data.get("results", []),
+                warnings=lookup.warnings,
+            )
+            tool_meta = {"name": "lookup_book", "ok": True}
+        else:
+            tool_meta = {"name": "lookup_book", "ok": False, "error": lookup.error}
+            retrieval = retrieval_fn(cleaned, k=k, prefer_vector=prefer_vector)
+    else:
+        filters = _extract_filters(cleaned)
+        if filters:
+            filtered = tool_filter_catalog(filters, k=k)
+            retrieval = RetrievalResult(
+                query=cleaned,
+                k=k,
+                source="orm",
+                degraded=True,
+                results=(filtered.data or {}).get("results", []),
+                warnings=filtered.warnings,
+            )
+            tool_meta = {"name": "filter_catalog", "ok": filtered.ok, "filters": filters}
+        else:
+            retrieval = retrieval_fn(cleaned, k=k, prefer_vector=prefer_vector)
     actions = _default_actions_from_results(retrieval.results)
 
     llm_meta: dict[str, Any] = {}
@@ -174,6 +265,8 @@ def handle_agent_message(
             "warnings": retrieval.warnings,
             "llm": llm_meta,
         }
+        if tool_meta is not None:
+            trace["tool"] = tool_meta
 
     return AgentResponse(
         message=final_message,

@@ -39,6 +39,20 @@
 	- `error: str` (cuando hay request inválido; el endpoint responde HTTP 400)
 - Fuente de verdad: `results` viene de retrieval; el LLM (si está configurado) solo redacta `message`.
 
+## Actualización: Fase 3 — tools read-only (core)
+
+- [COMPLETADO] Tools core (sin DRF) en `backend/agent/tools.py`:
+	- `tool_search_catalog`
+	- `tool_lookup_book`
+	- `tool_filter_catalog`
+	- `tool_recommend_similar`
+- [COMPLETADO] Integración mínima en `handle_agent_message`:
+	- Lookup por ID/ISBN y filtros básicos via tools (sin cambiar contrato).
+	- `trace` incluye metadata opcional de tool cuando aplica.
+- [COMPLETADO] Tests unitarios de tools y handler:
+	- `backend/agent/tests/test_tools.py`
+	- Ampliación en `backend/agent/tests/test_agent_handler.py`
+
 ## Actualización: Fase 5B — documentación en drf-spectacular
 
 - Se añadieron ejemplos de request/response (200/400) para `/api/agent/`.

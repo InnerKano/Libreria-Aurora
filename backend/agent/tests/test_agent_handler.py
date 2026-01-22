@@ -122,3 +122,43 @@ def test_actions_are_safe_and_optional(results):
 
     payload = resp.to_dict()
     assert isinstance(payload["actions"], list)
+
+
+def test_handle_agent_message_uses_lookup_tool_when_id_present(monkeypatch):
+    called = {"lookup": 0, "retrieval": 0}
+
+    def fake_lookup_book(*, book_id=None, isbn=None):
+        called["lookup"] += 1
+
+        class Resp:
+            ok = True
+            error = None
+            warnings = []
+            data = {"results": [{"libro_id": 123, "titulo": "A"}]}
+
+        return Resp()
+
+    def fake_retrieval(query: str, *, k: int = 5, prefer_vector: bool = True):
+        called["retrieval"] += 1
+        return FakeRetrievalResult(
+            query=query,
+            k=k,
+            source="orm",
+            degraded=True,
+            results=[],
+            warnings=[],
+        )
+
+    monkeypatch.setattr("agent.agent_handler.tool_lookup_book", fake_lookup_book)
+
+    resp = handle_agent_message(
+        "ver libro 123",
+        include_trace=True,
+        retrieval_fn=fake_retrieval,  # type: ignore[arg-type]
+        llm=FakeLLM("ok"),
+    )
+
+    payload = resp.to_dict()
+    assert called["lookup"] == 1
+    assert called["retrieval"] == 0
+    assert payload["results"][0]["libro_id"] == 123

@@ -156,6 +156,97 @@ Regla importante:
 - El LLM **no decide inventario, precio, IDs**. Solo redacta.
 - `results` siempre proviene de retrieval/ORM (o lista vacía) para evitar alucinaciones.
 
+---
+
+# Implementación actual (Fase 3): tools read-only (core)
+
+Esta sección documenta **cómo está estructurada** la Fase 3 (tools) y **cómo se integra** con el handler, para que sea mantenible y escalable antes de avanzar a Fase 4 (prompts/guardrails).
+
+## Objetivo (por qué existe)
+
+- Reforzar el principio “**fuente de verdad = catálogo**”: ante preguntas concretas (“ver libro 123”, “isbn …”, “categoria: …”), el backend debe responder con datos deterministas.
+- Evitar alucinaciones y evitar “magia” del LLM: las tools son funciones server-side con validación y salida estructurada.
+- Mantener seguridad: por ahora son **read-only** (no mutan BD, no crean pedidos, no cambian stock).
+
+## Dónde vive (qué archivos)
+
+- Core tools: `backend/agent/tools.py`
+	- Contiene las funciones tool y un contrato de retorno estable.
+	- No depende de DRF.
+	- Cuando requiere ORM, importa Django de forma defensiva (para permitir tests/unit sin DB cuando aplica).
+
+- Orquestación / routing: `backend/agent/agent_handler.py`
+	- Decide cuándo aplicar una tool vs cuándo hacer retrieval normal.
+	- Mantiene el contrato del endpoint: `message`, `results`, `actions` (y opcionalmente `trace`).
+
+## Contratos internos (para consistencia)
+
+### `ToolResult` (salida estructurada)
+
+En `backend/agent/tools.py` cada tool retorna `ToolResult(ok, data, error, warnings)` para:
+- Manejar fallos sin excepciones “sueltas” hacia el handler.
+- Dejar claro si hubo degradación (por ejemplo, ORM no disponible o parámetros inválidos).
+- Facilitar testeo (asserts sobre `ok`, `error` y `data`).
+
+### Serialización consistente de libros
+
+- `_serialize_libro(libro)` centraliza el shape de salida de `Libro`.
+- Esto evita que cada tool “invente” su JSON y reduce drift entre tools/retrieval/endpoint.
+
+## Tools implementadas (qué hacen y para qué sirven)
+
+Todas viven en `backend/agent/tools.py`.
+
+- `tool_search_catalog(query, k, prefer_vector, search_fn=None)`
+	- Wrapper validado sobre `search_catalog`.
+	- Permite inyectar `search_fn` en tests para no depender del vector store.
+
+- `tool_lookup_book(book_id=None, isbn=None)`
+	- Consulta exacta (ORM) para “un libro específico”.
+	- Devuelve error estructurado si faltan identificadores, si Django no está disponible o si no se encuentra.
+
+- `tool_filter_catalog(filters, k=5)`
+	- Filtros deterministas por atributos típicos (`categoria`, `autor`, `editorial`, `disponible`, `precio_min`, `precio_max`, `q`).
+	- Está pensada para preguntas tipo “categoria: Fantasía disponible precio_max: 25”.
+
+- `tool_recommend_similar(book_id, k=5, search_fn=None)`
+	- Construye una query a partir del libro base y usa retrieval (vector/ORM) para sugerir similares.
+	- Filtra el mismo `book_id` para no recomendar el mismo libro.
+
+## Integración en el handler (cómo se decide usar tools)
+
+La integración está en `backend/agent/agent_handler.py` y sigue una regla simple de prioridad:
+
+1) Si el mensaje contiene **ID** o **ISBN** → usar `tool_lookup_book`.
+2) Si el mensaje contiene **filtros explícitos** (prefijos tipo `categoria:` o flags como `disponible`) → usar `tool_filter_catalog`.
+3) Si no aplica nada anterior → usar retrieval estándar `search_catalog`.
+
+Para soportar esto sin dependencias extra, el handler incluye extractores básicos:
+
+- `_extract_book_id(message)`
+- `_extract_isbn(message)`
+- `_extract_filters(message)`
+
+Notas de diseño (responsable y escalable):
+- El routing actual es deliberadamente simple (regex/keywords) para evitar introducir un “tool selection model” prematuro.
+- Si mañana crece el número de tools, se puede migrar este routing a un router dedicado (por ejemplo `agent/tool_router.py`) sin cambiar el contrato del endpoint.
+
+## Observabilidad / trace (sin romper contrato)
+
+- Cuando `trace=true`, el handler puede incluir metadata en `trace["tool"]` indicando qué tool se aplicó y con qué inputs normalizados.
+- `trace` sigue siendo opcional: el frontend no debe depender de él.
+
+## Tests (qué se prueba y dónde)
+
+- Core tools: `backend/agent/tests/test_tools.py`
+	- Incluye tests sin DB (con `monkeypatch`) y tests con DB (`@pytest.mark.django_db`) para tools ORM.
+	- Requisito de entorno: para correr los tests con DB necesitas PostgreSQL levantado (por ejemplo vía `docker compose up -d` en la raíz del repo).
+
+- Orquestación del handler: `backend/agent/tests/test_agent_handler.py`
+	- Incluye un test que verifica que ante un mensaje con “id 123” se usa `tool_lookup_book` y no el fallback de retrieval.
+
+---
+
 ### Por qué esto es escalable
 
 - El core es testeable con mocks (no requiere HTTP).
