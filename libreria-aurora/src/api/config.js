@@ -36,7 +36,12 @@ const config = {
     mensajeria: "/api/mensajeria/",
     noticias: "/api/noticias/",
     compras: "/api/compras/",
-    busqueda: "/api/"
+    busqueda: "/api/",
+
+    // Agente LLM
+    agentChat: "/api/agent/",
+    agentSearch: "/api/agent/search/",
+    agentActions: "/api/agent/actions/"
   }
 };
 

@@ -139,13 +139,72 @@
 - Iteración 3: recomendaciones personalizadas (usar historial de compras/búsqueda) y resumen de pedidos.
 - Iteración 4: hardening (rate-limit, trazas completas, panel de monitoreo) y preparación para producción.
 
+---
+
+## Anexo: análisis de UI para el feature Agente LLM
+
+### Objetivo de UI
+- Exponer el asistente sin romper la experiencia actual.
+- Unificar búsqueda, resultados y acciones mutables en un flujo **intuitivo** y **responsable**.
+- Respetar la arquitectura actual: React + componentes existentes + API REST.
+
+### Principios de diseño (responsable, modular, escalable)
+- **Contrato estable**: la UI debe consumir `message/results/actions` sin asumir proveedor LLM.
+- **Fuente de verdad**: inventario/precio/stock siempre proviene de `results` del backend.
+- **Acciones explícitas**: acciones mutables (carrito/reserva/estado) requieren JWT y confirmación visual.
+- **Degradación controlada**: si el agente cae a modo degradado, la UI informa sin romper el flujo.
+
+### Mapeo UI ↔ Backend (fases)
+
+#### Iteración 1 (read-only)
+- Endpoint: `POST /api/agent/`
+- UI: chat lateral o sección dentro de `SearchBook`/`catalogo`.
+- Uso: mostrar `message` + lista de `results` con cards reutilizables.
+
+#### Iteración 2 (acciones mutables)
+- Endpoint: `POST /api/agent/actions/` (JWT)
+- UI: botones de acción por resultado (Agregar al carrito / Reservar / Ver estado).
+- Confirmaciones y feedback: modal/inline con respuesta de `actions`.
+
+#### Iteración 3+ (personalización)
+- Integrar “recomendaciones” y “estado de pedidos” como acciones sugeridas.
+
+### Componentes sugeridos (sin romper estructura actual)
+- Reutilizar cards de libros existentes:
+	- `libreria-aurora/src/components/book/bookCard.jsx`
+- Agregar un contenedor de chat modular:
+	- `libreria-aurora/src/components/agent/AgentChat.jsx` (nuevo)
+- Agregar una barra lateral opcional:
+	- `libreria-aurora/src/components/agent/AgentDrawer.jsx` (nuevo)
+
+### Flujo UI recomendado (intuitivo)
+1) Usuario escribe en el chat o busca.
+2) UI envía a `/api/agent/`.
+3) UI renderiza `message` + `results` con cards.
+4) Si el usuario está autenticado, se muestran acciones (carrito/reserva/estado).
+5) La acción dispara `/api/agent/actions/` y muestra feedback de éxito/error.
+
+### Manejo de autenticación (responsable)
+- Si no hay JWT: las acciones mutables se deshabilitan y muestran CTA “Inicia sesión”.
+- La UI no guarda ni expone claves LLM.
+
+### Errores y trazas (mantenibilidad)
+- Mostrar errores de forma legible (`error` del backend).
+- Si `trace=true` está habilitado en desarrollo, mostrar un panel dev opcional.
+
+### Entregables UI mínimos por fase
+- Iteración 1: chat + resultados reutilizando cards existentes.
+- Iteración 2: botones de acción con confirmación y feedback.
+- Iteración 3: historial y recomendaciones contextualizadas.
+
+### Riesgos UI y mitigación
+- **Acoplamiento al LLM** → consumir solo contrato estable.
+- **Acciones sin auth** → deshabilitar UI y mostrar CTA.
+- **Resultados vacíos** → fallback a recomendaciones de búsqueda o filtros.
+
 ## Riesgos y mitigaciones
 - **Alucinaciones sobre inventario/precio** → siempre validar contra BD via tools; no confiar en texto del LLM.
 - **Inconsistencia embeddings vs query** → fijar modelo y normalización en manifest; tests de smoke tras cada rebuild.
 - **Costos/latencia del LLM** → modelo eficiente por defecto, cache de respuestas para FAQs, timeouts cortos.
 - **Seguridad** → auth obligatoria para acciones mutables, sanitizar entradas, no exponer trazas internas al frontend.
 
-## Próximos pasos inmediatos
-- Congelar dataset del catálogo y definir manifest de embeddings.
-- Portar el flujo del notebook a un script reproducible (`build_vector_db.py`) y generar el primer `vector_db` local.
-- Implementar helper de vector store + endpoint `/api/agent/` con mock de LLM para empezar a probar estructura.
