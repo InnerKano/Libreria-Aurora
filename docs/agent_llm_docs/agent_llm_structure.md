@@ -158,6 +158,73 @@ Regla importante:
 
 ---
 
+# Implementación actual (Fase 5B): endurecimiento del endpoint conversacional
+
+Esta sección documenta **qué se fortaleció** en la Fase 5B y **dónde vive** la lógica para mantener el endpoint estable, seguro y fácil de mantener sin romper la arquitectura.
+
+## Objetivo (por qué existe)
+
+- Endurecer la capa HTTP con validaciones y parsing robusto.
+- Incorporar BYO key (Bring Your Own API Key) de manera **segura y no persistente**.
+- Mantener el contrato JSON intacto, sin dependencia del frontend ni del proveedor LLM.
+
+## Qué se fortaleció (qué hace)
+
+1) **Parsing robusto de inputs**
+	 - Tipos inválidos o mixtos no rompen el endpoint.
+	 - `k` se normaliza con límites razonables para evitar abuso o errores.
+	 - `prefer_vector` y `trace` se interpretan de forma consistente (bool-ish).
+
+2) **BYO key vía header**
+	 - Se acepta la key en el header `X-LLM-API-Key`.
+	 - La key **no se persiste** y solo se pasa al handler para esta llamada.
+	 - La política final de uso sigue la factory (`LLM_ALLOW_BYO_KEY`, `LLM_COST_MODE`).
+
+3) **Documentación y tests adicionales**
+	 - El header se documenta en OpenAPI.
+	 - Tests de wiring verifican el forwarding del header y el rechazo de mensajes no-string.
+
+## Dónde vive (archivos y funciones)
+
+### Capa DRF / Wiring (backend/apps/agent_api/)
+
+- [backend/apps/agent_api/views.py](backend/apps/agent_api/views.py)
+	- `AgentChatView.post(...)`:
+		- Normaliza `message`, `k`, `prefer_vector`, `trace`.
+		- Lee `X-LLM-API-Key` y lo pasa a `handle_agent_message(...)`.
+	- Helpers locales:
+		- `_parse_bool(...)` → parsing robusto de booleanos.
+		- `_parse_int(...)` → parsing de enteros con límites.
+
+- [backend/apps/agent_api/tests/test_agent_chat_api.py](backend/apps/agent_api/tests/test_agent_chat_api.py)
+	- `test_agent_chat_byo_key_forwarding`: valida el forwarding de BYO key.
+	- `test_agent_chat_rejects_non_string_message`: asegura que mensajes no-string se tratan como inválidos.
+
+### Core del agente (backend/agent/)
+
+- [backend/agent/agent_handler.py](backend/agent/agent_handler.py)
+	- `handle_agent_message(...)`:
+		- Acepta `byo_api_key` y lo entrega a la LLM factory.
+		- Mantiene contrato estable (no depende de DRF).
+
+- [backend/agent/llm_factory.py](backend/agent/llm_factory.py)
+	- `build_llm_runnable(byo_api_key=...)`:
+		- Aplica políticas BYO/paid/hybrid y fallback seguro.
+
+## Responsabilidades (para mantenimiento)
+
+- **Agent API (wiring):** valida, normaliza y protege inputs del mundo externo.
+- **Core agent:** orquesta, pero no conoce headers ni requests.
+- **LLM factory:** decide proveedor/keys/fallback sin exposición de secretos.
+
+## Por qué es escalable
+
+- El parsing robusto se mantiene aislado en el wiring: si cambian reglas, no se toca el core.
+- BYO key se integra como un input opcional: el core sigue determinista.
+- Los tests cubren el comportamiento sin depender de servicios externos.
+
+---
+
 # Implementación actual (Fase 4): prompts y guardrails (core)
 
 Esta sección documenta **dónde vive la lógica de prompt/validación**, por qué existe y cómo se integra de forma responsable.

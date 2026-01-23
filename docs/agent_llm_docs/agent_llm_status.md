@@ -65,6 +65,7 @@
 - Se añadieron ejemplos de request/response (200/400) para `/api/agent/`.
 - Se añadieron ejemplos de respuesta (vector y fallback ORM) para `/api/agent/search/`.
 - La documentación refleja el contrato estable sin agregar tools mutables.
+- Endurecimiento del endpoint `/api/agent/`: parsing robusto de inputs, soporte de BYO key por header y tests adicionales de wiring.
 
 ## Actualización: `llm_factory` (responsable, modular, escalable)
 

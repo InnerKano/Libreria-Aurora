@@ -83,3 +83,65 @@ def test_agent_chat_trace_flag_parsing(monkeypatch):
 
     assert response.status_code == 200
     assert captured["include_trace"] is True
+
+
+def test_agent_chat_byo_key_forwarding(monkeypatch):
+    captured: dict = {}
+
+    def fake_handle_agent_message(message, **kwargs):
+        captured["byo_api_key"] = kwargs.get("byo_api_key")
+
+        class Resp:
+            error = None
+
+            def to_dict(self):
+                return {
+                    "message": "ok",
+                    "results": [],
+                    "actions": [],
+                }
+
+        return Resp()
+
+    monkeypatch.setattr("apps.agent_api.views.handle_agent_message", fake_handle_agent_message)
+
+    factory = APIRequestFactory()
+    request = factory.post(
+        "/api/agent/",
+        {"message": "hola"},
+        format="json",
+        HTTP_X_LLM_API_KEY="test-key",
+    )
+    response = AgentChatView.as_view()(request)
+
+    assert response.status_code == 200
+    assert captured["byo_api_key"] == "test-key"
+
+
+def test_agent_chat_rejects_non_string_message(monkeypatch):
+    captured: dict = {}
+
+    def fake_handle_agent_message(message, **kwargs):
+        captured["message"] = message
+
+        class Resp:
+            error = "invalid_request"
+
+            def to_dict(self):
+                return {
+                    "error": "invalid_request",
+                    "message": "Mensaje vacío",
+                    "results": [],
+                    "actions": [],
+                }
+
+        return Resp()
+
+    monkeypatch.setattr("apps.agent_api.views.handle_agent_message", fake_handle_agent_message)
+
+    factory = APIRequestFactory()
+    request = factory.post("/api/agent/", {"message": {"bad": "payload"}}, format="json")
+    response = AgentChatView.as_view()(request)
+
+    assert response.status_code == 400
+    assert captured["message"] is None

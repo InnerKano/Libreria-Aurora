@@ -9,6 +9,30 @@ from agent.agent_handler import handle_agent_message
 from agent.retrieval import search_catalog
 
 
+def _parse_bool(value: object, *, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return default
+
+
+def _parse_int(value: object, *, default: int, min_value: int = 1, max_value: int = 50) -> int:
+    try:
+        parsed = int(value)  # type: ignore[arg-type]
+    except Exception:
+        return default
+    if parsed < min_value:
+        return min_value
+    if parsed > max_value:
+        return max_value
+    return parsed
+
+
 class AgentSearchView(APIView):
     permission_classes = [AllowAny]
 
@@ -119,6 +143,18 @@ class AgentChatView(APIView):
             "Usa retrieval como fuente de verdad y, opcionalmente, un LLM para redactar el mensaje. "
             "Siempre devuelve un JSON estable con message/results/actions y opcionalmente trace/error."
         ),
+        parameters=[
+            OpenApiParameter(
+                name="X-LLM-API-Key",
+                type=OpenApiTypes.STR,
+                description=(
+                    "API key del usuario para modo BYO (opcional). "
+                    "No se persiste y solo se usa para esta llamada si LLM_ALLOW_BYO_KEY=true."
+                ),
+                required=False,
+                location=OpenApiParameter.HEADER,
+            )
+        ],
         request=OpenApiTypes.OBJECT,
         examples=[
             OpenApiExample(
@@ -192,28 +228,21 @@ class AgentChatView(APIView):
     )
     def post(self, request):
         data = request.data or {}
-        message = data.get("message")
+        message_raw = data.get("message")
+        message = message_raw if isinstance(message_raw, str) else None
 
-        k = data.get("k", 5)
-        prefer_vector = data.get("prefer_vector", True)
-        trace = data.get("trace", False)
+        k_int = _parse_int(data.get("k", 5), default=5)
+        prefer_vector = _parse_bool(data.get("prefer_vector", True), default=True)
+        trace = _parse_bool(data.get("trace", False), default=False)
 
-        # Normalize bool-ish values from JSON or strings.
-        if isinstance(prefer_vector, str):
-            prefer_vector = prefer_vector.strip().lower() not in {"0", "false", "no"}
-        if isinstance(trace, str):
-            trace = trace.strip().lower() in {"1", "true", "yes"}
-
-        try:
-            k_int = int(k)
-        except Exception:
-            k_int = 5
+        byo_api_key = request.headers.get("X-LLM-API-Key")
 
         resp = handle_agent_message(
             message,
             k=k_int,
             prefer_vector=bool(prefer_vector),
             include_trace=bool(trace),
+            byo_api_key=byo_api_key,
         )
 
         status_code = 400 if resp.error else 200
