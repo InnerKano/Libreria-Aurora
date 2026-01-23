@@ -185,3 +185,67 @@ def test_handle_agent_message_uses_lookup_tool_when_id_present(monkeypatch):
     assert called["lookup"] == 1
     assert called["retrieval"] == 0
     assert payload["results"][0]["libro_id"] == 123
+
+
+def test_handle_agent_message_includes_request_id_and_timings_in_trace():
+    def fake_retrieval(query: str, *, k: int = 5, prefer_vector: bool = True):
+        return FakeRetrievalResult(
+            query=query,
+            k=k,
+            source="orm",
+            degraded=True,
+            results=[{"libro_id": 1, "titulo": "A"}],
+            warnings=[],
+        )
+
+    resp = handle_agent_message(
+        "algo",
+        include_trace=True,
+        retrieval_fn=fake_retrieval,  # type: ignore[arg-type]
+        llm=FakeLLM("- ok\n- ok"),
+        request_id="req-123",
+    )
+
+    payload = resp.to_dict()
+    assert payload["trace"]["request_id"] == "req-123"
+    assert isinstance(payload["trace"]["timings_ms"]["retrieval"], int)
+    assert isinstance(payload["trace"]["timings_ms"]["llm"], int)
+
+
+def test_handle_agent_message_records_metrics(monkeypatch):
+    counters: list[tuple[str, int]] = []
+    timings: list[tuple[str, int]] = []
+
+    def fake_counter(name: str, value: int = 1):
+        counters.append((name, value))
+
+    def fake_timing(name: str, duration_ms: int):
+        timings.append((name, duration_ms))
+
+    monkeypatch.setattr("agent.agent_handler.record_counter", fake_counter)
+    monkeypatch.setattr("agent.agent_handler.record_timing", fake_timing)
+
+    def fake_retrieval(query: str, *, k: int = 5, prefer_vector: bool = True):
+        return FakeRetrievalResult(
+            query=query,
+            k=k,
+            source="orm",
+            degraded=True,
+            results=[{"libro_id": 1, "titulo": "A"}],
+            warnings=[],
+        )
+
+    handle_agent_message(
+        "algo",
+        include_trace=False,
+        retrieval_fn=fake_retrieval,  # type: ignore[arg-type]
+        llm=FakeLLM("- ok\n- ok"),
+    )
+
+    counter_names = {name for name, _ in counters}
+    timing_names = {name for name, _ in timings}
+
+    assert "agent.llm_success" in counter_names
+    assert "agent.retrieval_orm" in counter_names
+    assert "agent.retrieval_ms" in timing_names
+    assert "agent.llm_total_ms" in timing_names

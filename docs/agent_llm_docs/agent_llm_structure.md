@@ -277,6 +277,71 @@ Esta sección describe **dónde vive** la cobertura de evaluación del agente, *
 
 ---
 
+# Implementación actual (Fase 7): observabilidad y operación (estructura)
+
+Esta sección documenta **dónde vive** la observabilidad añadida, **por qué existe** y **cómo mantenerla** sin acoplar la lógica del agente a DRF ni exponer datos sensibles.
+
+## Objetivo (por qué existe)
+
+- Trazabilidad mínima por request (request_id) para debugging y soporte.
+- Medición de latencias y degradación (vector vs ORM) sin introducir dependencia de terceros.
+- Rate limiting y logging seguro (sin exponer API keys ni prompts completos).
+
+## Dónde vive (qué archivos y funciones)
+
+### Core (sin Django/DRF)
+
+- [backend/agent/observability.py](backend/agent/observability.py)
+	- `new_request_id()` → genera un ID por request.
+	- `truncate_text()` / `redact_api_key()` → sanitiza texto sensible.
+	- `record_counter()` / `record_timing()` → métricas ligeras en memoria.
+	- `METRICS.snapshot()` → estado actual (útil para inspección interna).
+
+- [backend/agent/agent_handler.py](backend/agent/agent_handler.py)
+	- Registra timings (`agent.retrieval_ms`, `agent.llm_total_ms`).
+	- Contadores de degradación y estados LLM (`agent.retrieval_degraded`, `agent.llm_success`, etc.).
+	- Agrega `request_id` y `timings_ms` a `trace` cuando `include_trace=true`.
+
+### Wiring / API (DRF)
+
+- [backend/apps/agent_api/views.py](backend/apps/agent_api/views.py)
+	- Añade `X-Request-Id` en responses.
+	- Logging estructurado con `log_event()`.
+	- `throttle_scope` por endpoint (`agent_chat`, `agent_search`).
+	- Respeta `trace` y muestreo (`should_sample_trace()`).
+
+### Configuración
+
+- [backend/config/settings.py](backend/config/settings.py)
+	- Logging `agent` separado del logger global.
+	- `ScopedRateThrottle` con límites por scope.
+
+- [backend/.env.example](backend/.env.example)
+	- Variables de observabilidad (`AGENT_TRACE_*`, `AGENT_RATE_LIMIT_*`).
+
+### Tests (Fase 7)
+
+- [backend/agent/tests/test_agent_handler.py](backend/agent/tests/test_agent_handler.py)
+	- Verifica `request_id` y `timings_ms` en `trace`.
+	- Verifica contadores/timings con monkeypatch.
+
+- [backend/apps/agent_api/tests/test_agent_observability.py](backend/apps/agent_api/tests/test_agent_observability.py)
+	- Verifica `X-Request-Id` y `trace.request_id` en responses.
+
+## Responsabilidades (para mantenimiento)
+
+- **Core**: genera métricas y trace sin depender de HTTP ni de DRF.
+- **Wiring**: agrega headers, throttling y logging seguro del request.
+- **Config**: define límites y niveles de logging por entorno.
+
+## Guías de mantenimiento (escalable y responsable)
+
+- No registrar texto completo del usuario ni keys; siempre usar `truncate_text()`/`redact_api_key()`.
+- No acoplar métricas a servicios externos aquí; si se integra Prometheus/Sentry, hacerlo en un wrapper sin tocar el core.
+- Mantener `trace` opcional para evitar dependencia del frontend.
+
+---
+
 # Implementación actual (Fase 4): prompts y guardrails (core)
 
 Esta sección documenta **dónde vive la lógica de prompt/validación**, por qué existe y cómo se integra de forma responsable.

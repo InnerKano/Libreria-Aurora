@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
@@ -8,6 +9,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 from .guardrails import validate_llm_message
 from .llm_factory import build_llm_runnable
+from .observability import record_counter, record_timing
 from .prompts import build_llm_prompt
 from .retrieval import RetrievalResult, search_catalog
 from .tools import tool_filter_catalog, tool_lookup_book
@@ -133,6 +135,7 @@ def handle_agent_message(
     retrieval_fn: Optional[Callable[..., RetrievalResult]] = None,
     llm: Optional[Any] = None,
     byo_api_key: Optional[str] = None,
+    request_id: Optional[str] = None,
 ) -> AgentResponse:
     """Minimal conversational handler.
 
@@ -163,6 +166,8 @@ def handle_agent_message(
 
     book_id = _extract_book_id(cleaned)
     isbn = _extract_isbn(cleaned)
+
+    retrieval_started = time.monotonic()
 
     if book_id is not None or isbn is not None:
         lookup = tool_lookup_book(book_id=book_id, isbn=isbn)
@@ -196,14 +201,25 @@ def handle_agent_message(
             retrieval = retrieval_fn(cleaned, k=k, prefer_vector=prefer_vector)
     actions = _default_actions_from_results(retrieval.results)
 
+    retrieval_ms = int((time.monotonic() - retrieval_started) * 1000)
+    record_timing("agent.retrieval_ms", retrieval_ms)
+    if retrieval.degraded:
+        record_counter("agent.retrieval_degraded")
+    if retrieval.source == "vector":
+        record_counter("agent.retrieval_vector")
+    else:
+        record_counter("agent.retrieval_orm")
+
     llm_meta: dict[str, Any] = {}
     final_message: str
+    llm_started = time.monotonic()
 
     try:
         runnable = llm or build_llm_runnable(byo_api_key=byo_api_key)
         prompt = build_llm_prompt(user_message=cleaned, retrieval=retrieval)
         llm_resp = runnable.invoke(prompt)
         final_message = (llm_resp or {}).get("content") or ""
+        record_counter("agent.llm_success")
         llm_meta = {
             "provider": (llm_resp or {}).get("provider"),
             "model": (llm_resp or {}).get("model"),
@@ -214,6 +230,7 @@ def handle_agent_message(
         if not guard.ok:
             raise RuntimeError(f"LLM guardrails failed: {','.join(guard.errors)}")
     except ImproperlyConfigured as e:
+        record_counter("agent.llm_unconfigured")
         final_message = _build_fallback_message(
             query=retrieval.query,
             results_count=len(retrieval.results),
@@ -222,6 +239,7 @@ def handle_agent_message(
         )
         llm_meta = {"error": str(e), "provider": "unconfigured"}
     except Exception as e:
+        record_counter("agent.llm_failed")
         final_message = _build_fallback_message(
             query=retrieval.query,
             results_count=len(retrieval.results),
@@ -230,14 +248,22 @@ def handle_agent_message(
         )
         llm_meta = {"error": str(e), "provider": "failed"}
 
+    llm_ms = int((time.monotonic() - llm_started) * 1000)
+    record_timing("agent.llm_total_ms", llm_ms)
+
     trace: Optional[dict[str, Any]] = None
     if include_trace:
         trace = {
+            "request_id": request_id,
             "query": retrieval.query,
             "k": retrieval.k,
             "source": retrieval.source,
             "degraded": retrieval.degraded,
             "warnings": retrieval.warnings,
+            "timings_ms": {
+                "retrieval": retrieval_ms,
+                "llm": llm_ms,
+            },
             "llm": llm_meta,
         }
         if tool_meta is not None:

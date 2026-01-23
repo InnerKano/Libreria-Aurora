@@ -243,6 +243,13 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_THROTTLE_CLASSES': (
+        'rest_framework.throttling.ScopedRateThrottle',
+    ),
+    'DEFAULT_THROTTLE_RATES': {
+        'agent_chat': env('AGENT_RATE_LIMIT_CHAT', default='30/min'),
+        'agent_search': env('AGENT_RATE_LIMIT_SEARCH', default='60/min'),
+    },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
@@ -328,5 +335,37 @@ STORAGES = {
     },
     'staticfiles': {
         'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+    },
+}
+
+# Logging (responsable, sin exponer secretos)
+LOG_LEVEL = env('LOG_LEVEL', default='INFO')
+AGENT_LOG_LEVEL = env('AGENT_LOG_LEVEL', default=LOG_LEVEL)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {
+            'format': '%(asctime)s %(levelname)s %(name)s %(message)s',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'standard',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': LOG_LEVEL,
+            'propagate': True,
+        },
+        'agent': {
+            'handlers': ['console'],
+            'level': AGENT_LOG_LEVEL,
+            'propagate': False,
+        },
     },
 }

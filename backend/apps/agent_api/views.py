@@ -1,3 +1,5 @@
+import time
+
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -6,6 +8,13 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema
 
 from agent.agent_handler import handle_agent_message
+from agent.observability import (
+    elapsed_ms,
+    log_event,
+    new_request_id,
+    should_sample_trace,
+    truncate_text,
+)
 from agent.retrieval import search_catalog
 
 
@@ -35,6 +44,7 @@ def _parse_int(value: object, *, default: int, min_value: int = 1, max_value: in
 
 class AgentSearchView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = "agent_search"
 
     @extend_schema(
         description=(
@@ -116,13 +126,15 @@ class AgentSearchView(APIView):
         },
     )
     def get(self, request):
+        request_id = new_request_id()
+        started = time.monotonic()
         q = request.query_params.get("q", "")
         k = request.query_params.get("k", 5)
         prefer_vector_raw = request.query_params.get("prefer_vector", "true")
         prefer_vector = str(prefer_vector_raw).strip().lower() not in {"0", "false", "no"}
 
         res = search_catalog(q, k=k, prefer_vector=prefer_vector)
-        return Response(
+        response = Response(
             {
                 "query": res.query,
                 "k": res.k,
@@ -132,10 +144,24 @@ class AgentSearchView(APIView):
                 "results": res.results,
             }
         )
+        response["X-Request-Id"] = request_id
+        log_event(
+            "agent.search",
+            request_id=request_id,
+            duration_ms=elapsed_ms(started),
+            query=truncate_text(q),
+            k=res.k,
+            source=res.source,
+            degraded=res.degraded,
+            results_count=len(res.results),
+            warnings_count=len(res.warnings),
+        )
+        return response
 
 
 class AgentChatView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = "agent_chat"
 
     @extend_schema(
         description=(
@@ -227,6 +253,8 @@ class AgentChatView(APIView):
         },
     )
     def post(self, request):
+        request_id = new_request_id()
+        started = time.monotonic()
         data = request.data or {}
         message_raw = data.get("message")
         message = message_raw if isinstance(message_raw, str) else None
@@ -243,7 +271,32 @@ class AgentChatView(APIView):
             prefer_vector=bool(prefer_vector),
             include_trace=bool(trace),
             byo_api_key=byo_api_key,
+            request_id=request_id,
         )
 
         status_code = 400 if resp.error else 200
-        return Response(resp.to_dict(), status=status_code)
+        payload = resp.to_dict()
+        sampled = should_sample_trace()
+        if trace and sampled and payload.get("trace") is None:
+            payload["trace"] = {"request_id": request_id}
+
+        response = Response(payload, status=status_code)
+        response["X-Request-Id"] = request_id
+
+        trace_payload = payload.get("trace") if isinstance(payload, dict) else None
+        log_event(
+            "agent.chat",
+            request_id=request_id,
+            duration_ms=elapsed_ms(started),
+            message=truncate_text(message_raw),
+            k=k_int,
+            prefer_vector=bool(prefer_vector),
+            status=status_code,
+            error=payload.get("error") if isinstance(payload, dict) else None,
+            degraded=(trace_payload or {}).get("degraded") if trace_payload else None,
+            source=(trace_payload or {}).get("source") if trace_payload else None,
+            results_count=len(payload.get("results", [])) if isinstance(payload, dict) else 0,
+            warnings_count=len((trace_payload or {}).get("warnings", [])) if trace_payload else None,
+            sampled_trace=sampled,
+        )
+        return response

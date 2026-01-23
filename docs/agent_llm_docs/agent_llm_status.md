@@ -79,6 +79,18 @@
 - [COMPLETADO] Smoke test opcional de vector DB (skippable por env):
 	- `backend/agent/tests/test_vector_smoke.py` (activar con `RUN_VECTOR_SMOKE=1`)
 
+## Actualización: Fase 7 — observabilidad y operación
+
+- [COMPLETADO] Logging estructurado del agente (request_id, latencias, degradación):
+	- Core: `backend/agent/observability.py`
+	- Wiring: `backend/apps/agent_api/views.py`
+- [COMPLETADO] Métricas básicas en memoria (contadores y timings):
+	- `agent.observability.METRICS` con helpers `record_counter` y `record_timing`.
+- [COMPLETADO] Trazas seguras (truncado, muestreo) y `X-Request-Id` en respuesta.
+- [COMPLETADO] Rate limiting scoped para `/api/agent/` y `/api/agent/search/`:
+	- Config en `backend/config/settings.py` con `ScopedRateThrottle`.
+	- Variables en `.env.example` (`AGENT_RATE_LIMIT_CHAT`, `AGENT_RATE_LIMIT_SEARCH`).
+
 ## Actualización: `llm_factory` (responsable, modular, escalable)
 
 ### Objetivo (por qué existe)
