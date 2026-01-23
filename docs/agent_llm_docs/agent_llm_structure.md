@@ -160,6 +160,90 @@ Regla importante:
 
 ---
 
+# Implementación actual (Fase 8 – Iteración 2): acciones mutables con auth
+
+Esta sección documenta **la estructura**, **los archivos** y **el porqué** de la integración de acciones mutables (carrito/reserva/estado) de forma segura, modular y mantenible.
+
+## Objetivo (por qué existe)
+- Habilitar acciones mutables con **JWT obligatorio** sin romper el contrato estable del agente.
+- Reutilizar reglas de negocio existentes (compras/reservas) evitando duplicar lógica.
+- Mantener el core del agente libre de DRF y el wiring delgado.
+
+## API pública (wiring)
+
+### Endpoint
+- `POST /api/agent/actions/` (acciones mutables, requiere JWT)
+
+### Archivos involucrados
+- Wiring y HTTP:
+	- `backend/apps/agent_api/views.py`
+		- `AgentActionView.post(...)`
+	- `backend/apps/agent_api/urls.py`
+		- `path("actions/", AgentActionView.as_view(), ...)`
+
+### Contrato del request
+Body JSON:
+- `action: str` (requerido)
+- `payload: dict` (opcional; inputs específicos por acción)
+- `trace: bool` (opcional, default false)
+
+Acciones soportadas:
+- `add_to_cart` → `payload: {"book_id": int, "cantidad": int}`
+- `reserve_book` → `payload: {"book_id": int, "cantidad": int}`
+- `order_status` → `payload: {"order_id": int}`
+
+### Contrato del response
+Siempre presente:
+- `message: str`
+- `results: list[dict]` (resultado de la acción, normalizado)
+- `actions: list[dict]` (incluye `action_result` con `ok/error/warnings`)
+
+Opcional:
+- `trace: dict`
+- `error: str` (HTTP 400 si la acción es inválida o falla)
+
+## Core del agente (orquestación sin DRF)
+
+### Archivos involucrados
+- Core handler:
+	- `backend/agent/agent_handler.py`
+		- `handle_agent_action(...)` → orquesta la ejecución de tools mutables y mantiene el contrato.
+		- `_parse_int(...)` → parsing seguro para inputs.
+
+### Tools mutables (core)
+- `backend/agent/tools.py`:
+	- `tool_add_to_cart(...)` → agrega libro al carrito del usuario.
+	- `tool_reserve_book(...)` → crea reserva con reglas de negocio.
+	- `tool_order_status(...)` → devuelve estado y items del pedido.
+
+Serializadores internos:
+- `_serialize_reserva(...)`
+- `_serialize_pedido(...)`
+- `_normalize_quantity(...)` (validación y clamp de cantidad)
+
+## Reutilización de dominio (por qué es responsable)
+- Las tools mutables delegan a modelos y reglas existentes en `apps.compras` para evitar duplicación.
+- Se valida stock, límites de reserva y estado usando la lógica actual de negocio.
+
+## Observabilidad y rate limiting
+- `throttle_scope=agent_action` en el endpoint.
+- Métricas: `agent.action_ms`, `agent.action_ok`, `agent.action_failed`.
+- Configuración en `backend/config/settings.py` y `.env.example`.
+
+## Tests (dónde se valida)
+- Wiring/API:
+	- `backend/apps/agent_api/tests/test_agent_actions_api.py`
+		- Auth requerida (401 sin JWT).
+		- Acción inválida → 400 con `error=invalid_action`.
+		- `add_to_cart` exitoso con resultados normalizados.
+
+## UI (pendiente)
+- El frontend debe integrar `/api/agent/actions/` para ejecutar acciones mutables.
+- La UI debe enviar JWT y mapear acciones a payloads esperados.
+- Mantener el contrato estable evita acoplarse al proveedor LLM.
+
+---
+
 # Implementación actual (Fase 5B): endurecimiento del endpoint conversacional
 
 Esta sección documenta **qué se fortaleció** en la Fase 5B y **dónde vive** la lógica para mantener el endpoint estable, seguro y fácil de mantener sin romper la arquitectura.

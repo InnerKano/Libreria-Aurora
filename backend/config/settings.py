@@ -249,6 +249,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'agent_chat': env('AGENT_RATE_LIMIT_CHAT', default='30/min'),
         'agent_search': env('AGENT_RATE_LIMIT_SEARCH', default='60/min'),
+        'agent_action': env('AGENT_RATE_LIMIT_ACTION', default='20/min'),
     },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }

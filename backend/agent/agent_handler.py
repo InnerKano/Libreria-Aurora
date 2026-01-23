@@ -12,7 +12,13 @@ from .llm_factory import build_llm_runnable
 from .observability import record_counter, record_timing
 from .prompts import build_llm_prompt
 from .retrieval import RetrievalResult, search_catalog
-from .tools import tool_filter_catalog, tool_lookup_book
+from .tools import (
+    tool_add_to_cart,
+    tool_filter_catalog,
+    tool_lookup_book,
+    tool_order_status,
+    tool_reserve_book,
+)
 
 
 @dataclass(frozen=True)
@@ -278,4 +284,91 @@ def handle_agent_message(
     )
 
 
-__all__ = ["AgentResponse", "handle_agent_message"]
+def _parse_int(value: Any, *, default: int) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def handle_agent_action(
+    action: Optional[str],
+    payload: Optional[dict[str, Any]],
+    *,
+    user_id: int,
+    include_trace: bool = False,
+    request_id: Optional[str] = None,
+) -> AgentResponse:
+    normalized = (action or "").strip().lower()
+    payload = payload or {}
+
+    started = time.monotonic()
+
+    if normalized == "add_to_cart":
+        book_id = _parse_int(payload.get("book_id"), default=-1)
+        cantidad = payload.get("cantidad", 1)
+        tool_result = tool_add_to_cart(user_id=user_id, book_id=book_id, cantidad=cantidad)
+    elif normalized == "reserve_book":
+        book_id = _parse_int(payload.get("book_id"), default=-1)
+        cantidad = payload.get("cantidad", 1)
+        tool_result = tool_reserve_book(user_id=user_id, book_id=book_id, cantidad=cantidad)
+    elif normalized == "order_status":
+        order_id = _parse_int(payload.get("order_id"), default=-1)
+        tool_result = tool_order_status(user_id=user_id, order_id=order_id)
+    else:
+        return AgentResponse(
+            message="Acción inválida. Usa: add_to_cart, reserve_book u order_status.",
+            results=[],
+            actions=[],
+            trace={"request_id": request_id, "action": normalized} if include_trace else None,
+            error="invalid_action",
+        )
+
+    duration_ms = int((time.monotonic() - started) * 1000)
+    record_timing("agent.action_ms", duration_ms)
+    record_counter("agent.action_ok" if tool_result.ok else "agent.action_failed")
+
+    data = tool_result.data or {}
+    if isinstance(data, dict) and isinstance(data.get("results"), list):
+        results = data.get("results", [])
+    elif isinstance(data, dict) and data.get("result") is not None:
+        results = [data.get("result")]
+    else:
+        results = []
+
+    message = (data.get("message") if isinstance(data, dict) else None) or (
+        f"Acción '{normalized}' completada." if tool_result.ok else f"No se pudo ejecutar '{normalized}'."
+    )
+
+    actions = [
+        {
+            "type": "action_result",
+            "action": normalized,
+            "ok": tool_result.ok,
+            "error": tool_result.error,
+            "warnings": tool_result.warnings,
+            "data": tool_result.data,
+        }
+    ]
+
+    trace: Optional[dict[str, Any]] = None
+    if include_trace:
+        trace = {
+            "request_id": request_id,
+            "action": normalized,
+            "ok": tool_result.ok,
+            "error": tool_result.error,
+            "warnings": tool_result.warnings,
+            "duration_ms": duration_ms,
+        }
+
+    return AgentResponse(
+        message=message,
+        results=results,
+        actions=actions,
+        trace=trace,
+        error=None if tool_result.ok else (tool_result.error or "action_failed"),
+    )
+
+
+__all__ = ["AgentResponse", "handle_agent_message", "handle_agent_action"]

@@ -1,13 +1,13 @@
 import time
 
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema
 
-from agent.agent_handler import handle_agent_message
+from agent.agent_handler import handle_agent_action, handle_agent_message
 from agent.observability import (
     elapsed_ms,
     log_event,
@@ -297,6 +297,120 @@ class AgentChatView(APIView):
             source=(trace_payload or {}).get("source") if trace_payload else None,
             results_count=len(payload.get("results", [])) if isinstance(payload, dict) else 0,
             warnings_count=len((trace_payload or {}).get("warnings", [])) if trace_payload else None,
+            sampled_trace=sampled,
+        )
+        return response
+
+
+class AgentActionView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_scope = "agent_action"
+
+    @extend_schema(
+        description=(
+            "Endpoint de acciones mutables del agente (requiere JWT). "
+            "Acciones soportadas: add_to_cart, reserve_book, order_status. "
+            "Devuelve el contrato estable message/results/actions y opcionalmente trace/error."
+        ),
+        request=OpenApiTypes.OBJECT,
+        examples=[
+            OpenApiExample(
+                "Request add_to_cart",
+                value={"action": "add_to_cart", "payload": {"book_id": 123, "cantidad": 1}, "trace": False},
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Request reserve_book",
+                value={"action": "reserve_book", "payload": {"book_id": 123, "cantidad": 1}},
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Request order_status",
+                value={"action": "order_status", "payload": {"order_id": 456}},
+                request_only=True,
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                examples=[
+                    OpenApiExample(
+                        "Respuesta 200",
+                        value={
+                            "message": "Libro agregado al carrito.",
+                            "results": [
+                                {
+                                    "carrito_id": 1,
+                                    "libro": {"libro_id": 123, "titulo": "Ejemplo"},
+                                    "cantidad": 1,
+                                }
+                            ],
+                            "actions": [
+                                {
+                                    "type": "action_result",
+                                    "action": "add_to_cart",
+                                    "ok": True,
+                                    "error": None,
+                                }
+                            ],
+                        },
+                        response_only=True,
+                        status_codes=["200"],
+                    )
+                ],
+            ),
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                examples=[
+                    OpenApiExample(
+                        "Respuesta 400 (acción inválida)",
+                        value={
+                            "message": "Acción inválida. Usa: add_to_cart, reserve_book u order_status.",
+                            "results": [],
+                            "actions": [],
+                            "error": "invalid_action",
+                        },
+                        response_only=True,
+                        status_codes=["400"],
+                    )
+                ],
+            ),
+        },
+    )
+    def post(self, request):
+        request_id = new_request_id()
+        started = time.monotonic()
+        data = request.data or {}
+        action = data.get("action")
+        payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+        trace = _parse_bool(data.get("trace", False), default=False)
+
+        resp = handle_agent_action(
+            action if isinstance(action, str) else None,
+            payload,
+            user_id=request.user.id,
+            include_trace=bool(trace),
+            request_id=request_id,
+        )
+
+        status_code = 400 if resp.error else 200
+        payload_out = resp.to_dict()
+        sampled = should_sample_trace()
+        if trace and sampled and payload_out.get("trace") is None:
+            payload_out["trace"] = {"request_id": request_id}
+
+        response = Response(payload_out, status=status_code)
+        response["X-Request-Id"] = request_id
+
+        trace_payload = payload_out.get("trace") if isinstance(payload_out, dict) else None
+        log_event(
+            "agent.action",
+            request_id=request_id,
+            duration_ms=elapsed_ms(started),
+            action=truncate_text(action),
+            status=status_code,
+            error=payload_out.get("error") if isinstance(payload_out, dict) else None,
+            ok=(trace_payload or {}).get("ok") if trace_payload else None,
             sampled_trace=sampled,
         )
         return response

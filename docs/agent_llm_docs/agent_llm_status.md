@@ -91,6 +91,18 @@
 	- Config en `backend/config/settings.py` con `ScopedRateThrottle`.
 	- Variables en `.env.example` (`AGENT_RATE_LIMIT_CHAT`, `AGENT_RATE_LIMIT_SEARCH`).
 
+## Actualización: Fase 8 — Iteración 2 (acciones mutables con auth)
+
+- [COMPLETADO] Endpoint protegido `/api/agent/actions/` (POST) para acciones mutables con JWT.
+	- Wiring DRF: `backend/apps/agent_api/views.py` + `urls.py`.
+	- `throttle_scope=agent_action` y logging estructurado.
+- [COMPLETADO] Tools mutables en core (sin DRF):
+	- `tool_add_to_cart`, `tool_reserve_book`, `tool_order_status`.
+- [COMPLETADO] Orquestación core para acciones: `handle_agent_action(...)`.
+- [COMPLETADO] Tests de API para acciones (auth requerida, acción inválida, add_to_cart ok).
+- [COMPLETADO] Variables env para rate limit: `AGENT_RATE_LIMIT_ACTION`.
+- Pendiente UI: integrar en frontend un flujo de acciones (carrito/reserva/estado) consumiendo `/api/agent/actions/`.
+
 ## Actualización: `llm_factory` (responsable, modular, escalable)
 
 ### Objetivo (por qué existe)

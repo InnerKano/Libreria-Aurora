@@ -6,6 +6,8 @@ from typing import Any, Callable, Optional
 
 from .retrieval import RetrievalResult, search_catalog
 
+MAX_ACTION_QTY = 10
+
 
 @dataclass(frozen=True)
 class ToolResult:
@@ -28,6 +30,43 @@ def _serialize_libro(libro: Any) -> dict[str, Any]:
         "año_publicacion": getattr(libro, "año_publicacion", None),
         "descripcion": getattr(libro, "descripcion", None),
     }
+
+
+def _serialize_reserva(reserva: Any) -> dict[str, Any]:
+    return {
+        "reserva_id": reserva.id,
+        "libro_id": reserva.libro_id,
+        "usuario_id": reserva.usuario_id,
+        "cantidad": reserva.cantidad,
+        "estado": reserva.estado,
+        "fecha_reserva": reserva.fecha_reserva.isoformat() if reserva.fecha_reserva else None,
+        "fecha_expiracion": reserva.fecha_expiracion.isoformat() if reserva.fecha_expiracion else None,
+    }
+
+
+def _serialize_pedido(pedido: Any, items: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "pedido_id": pedido.id,
+        "usuario_id": pedido.usuario_id,
+        "estado": pedido.estado,
+        "fecha": pedido.fecha.isoformat() if pedido.fecha else None,
+        "items": items,
+    }
+
+
+def _normalize_quantity(value: Any, warnings: list[str]) -> int:
+    try:
+        qty = int(value)
+    except Exception:
+        warnings.append("Invalid 'cantidad' value; defaulted to 1")
+        return 1
+    if qty <= 0:
+        warnings.append("Non-positive 'cantidad' value; defaulted to 1")
+        return 1
+    if qty > MAX_ACTION_QTY:
+        warnings.append(f"Cantidad too large; clamped to {MAX_ACTION_QTY}")
+        return MAX_ACTION_QTY
+    return qty
 
 
 def tool_search_catalog(
@@ -208,10 +247,112 @@ def tool_recommend_similar(
     return ToolResult(ok=True, data=data, error=None, warnings=res.warnings)
 
 
+def tool_add_to_cart(*, user_id: int, book_id: int, cantidad: Any = 1) -> ToolResult:
+    warnings: list[str] = []
+    qty = _normalize_quantity(cantidad, warnings)
+
+    try:
+        from apps.usuarios.models import Usuario
+        from apps.libros.models import Libro
+        from apps.compras.models import Carrito
+    except Exception as e:
+        return ToolResult(ok=False, data=None, error="django_unavailable", warnings=[str(e)])
+
+    usuario = Usuario.objects.filter(id=user_id).first()
+    if not usuario:
+        return ToolResult(ok=False, data=None, error="user_not_found", warnings=warnings)
+
+    libro = Libro.objects.filter(id=book_id).first()
+    if not libro:
+        return ToolResult(ok=False, data=None, error="book_not_found", warnings=warnings)
+
+    if libro.stock is not None and libro.stock < qty:
+        return ToolResult(ok=False, data=None, error="insufficient_stock", warnings=warnings)
+
+    carrito, _ = Carrito.objects.get_or_create(usuario=usuario)
+    carrito.agregar_libro(libro, qty)
+
+    data = {
+        "message": f"Libro '{libro.titulo}' agregado al carrito.",
+        "result": {
+            "carrito_id": carrito.id,
+            "libro": _serialize_libro(libro),
+            "cantidad": qty,
+        },
+    }
+    return ToolResult(ok=True, data=data, error=None, warnings=warnings)
+
+
+def tool_reserve_book(*, user_id: int, book_id: int, cantidad: Any = 1) -> ToolResult:
+    warnings: list[str] = []
+    qty = _normalize_quantity(cantidad, warnings)
+
+    try:
+        from apps.usuarios.models import Usuario
+        from apps.libros.models import Libro
+        from apps.compras.models import Reserva
+    except Exception as e:
+        return ToolResult(ok=False, data=None, error="django_unavailable", warnings=[str(e)])
+
+    usuario = Usuario.objects.filter(id=user_id).first()
+    if not usuario:
+        return ToolResult(ok=False, data=None, error="user_not_found", warnings=warnings)
+
+    libro = Libro.objects.filter(id=book_id).first()
+    if not libro:
+        return ToolResult(ok=False, data=None, error="book_not_found", warnings=warnings)
+
+    result = Reserva().reservar_libro(libro, usuario, qty)
+    if result.get("estado") != "exito":
+        return ToolResult(ok=False, data=None, error="reservation_failed", warnings=warnings + [result.get("mensaje")])
+
+    reserva = result.get("reserva")
+    data = {
+        "message": result.get("mensaje") or "Reserva creada.",
+        "result": _serialize_reserva(reserva),
+    }
+    return ToolResult(ok=True, data=data, error=None, warnings=warnings)
+
+
+def tool_order_status(*, user_id: int, order_id: int) -> ToolResult:
+    warnings: list[str] = []
+
+    try:
+        from apps.usuarios.models import Usuario
+        from apps.compras.models import Pedidos, PedidoLibro
+    except Exception as e:
+        return ToolResult(ok=False, data=None, error="django_unavailable", warnings=[str(e)])
+
+    usuario = Usuario.objects.filter(id=user_id).first()
+    if not usuario:
+        return ToolResult(ok=False, data=None, error="user_not_found", warnings=warnings)
+
+    pedido = Pedidos.objects.filter(id=order_id, usuario=usuario).first()
+    if not pedido:
+        return ToolResult(ok=False, data=None, error="order_not_found", warnings=warnings)
+
+    items = [
+        {
+            "libro_id": item.libro_id,
+            "titulo": getattr(item.libro, "titulo", None),
+            "cantidad": item.cantidad,
+        }
+        for item in PedidoLibro.objects.filter(pedido=pedido).select_related("libro")
+    ]
+    data = {
+        "message": f"Estado del pedido #{pedido.id}: {pedido.estado}.",
+        "result": _serialize_pedido(pedido, items),
+    }
+    return ToolResult(ok=True, data=data, error=None, warnings=warnings)
+
+
 __all__ = [
     "ToolResult",
     "tool_search_catalog",
     "tool_lookup_book",
     "tool_filter_catalog",
     "tool_recommend_similar",
+    "tool_add_to_cart",
+    "tool_reserve_book",
+    "tool_order_status",
 ]
