@@ -37,6 +37,7 @@ Paquete Python con la **lógica del feature** que debe poder ejecutarse con mín
 ### Tests
 - Tests unitarios del core (sin HTTP) en `backend/agent/tests/`.
 	- Ejemplo: `test_llm_factory.py`, `test_retrieval.py`.
+	- Fase 6 (evaluación): `test_golden_set.py`, `test_prompts.py`, `test_vector_smoke.py`.
 
 ---
 
@@ -58,6 +59,7 @@ Una app Django “delgada” que expone el feature del agente como API.
 ### Tests
 - Tests de endpoints y wiring (DRF) en `backend/apps/agent_api/tests/`.
 	- Ejemplo: `test_phase2_api.py`.
+	- Fase 6 (evaluación): `test_agent_chat_api.py` (parsing robusto adicional).
 
 ---
 
@@ -222,6 +224,56 @@ Esta sección documenta **qué se fortaleció** en la Fase 5B y **dónde vive** 
 - El parsing robusto se mantiene aislado en el wiring: si cambian reglas, no se toca el core.
 - BYO key se integra como un input opcional: el core sigue determinista.
 - Los tests cubren el comportamiento sin depender de servicios externos.
+
+---
+
+# Implementación actual (Fase 6): evaluación y tests (estructural)
+
+Esta sección describe **dónde vive** la cobertura de evaluación del agente, **por qué existe**, y **cómo mantenerla** sin contaminar la lógica productiva.
+
+## Objetivo (por qué existe)
+
+- Validar el contrato estable del agente con casos representativos.
+- Detectar regresiones tempranas sin depender de servicios externos ni de la BD.
+- Mantener pruebas deterministas, rápidas y portables entre entornos.
+
+## Dónde vive (qué archivos)
+
+### Core (sin HTTP)
+
+- Golden set y pruebas de regresión:
+	- `backend/agent/tests/fixtures/agent_golden_set.json`
+	- `backend/agent/tests/test_golden_set.py`
+	- **Qué valida:** contrato mínimo, rutas de tools (`lookup_book`, `filter_catalog`), resultados mínimos.
+	- **Cómo está diseñado:** usa stubs para retrieval/LLM y monkeypatch de tools para mantener determinismo.
+
+- Prompts:
+	- `backend/agent/tests/test_prompts.py`
+	- **Qué valida:** el prompt contiene el mensaje del usuario y el contexto mínimo de retrieval.
+	- **Por qué es importante:** evita regressions silenciosas en el contenido del prompt.
+
+- Vector store (smoke test determinista):
+	- `backend/agent/tests/test_vector_smoke.py`
+	- **Qué valida:** o bien el vector DB responde, o falla con un error controlado/entendible.
+	- **Nota de diseño:** no requiere conexión externa y no usa skips; valida comportamiento en ambos escenarios.
+
+### Wiring / API (DRF)
+
+- Parsing robusto adicional:
+	- `backend/apps/agent_api/tests/test_agent_chat_api.py`
+	- **Qué valida:** límites de `k` (clamp) y parsing bool-ish de `prefer_vector`.
+
+## Responsabilidades (para mantenimiento)
+
+- **Tests core:** validan la lógica de orquestación sin Django/HTTP; deben seguir siendo rápidos y deterministas.
+- **Tests de API:** validan el wiring y parsing; no prueban lógica del agente (eso vive en core).
+- **Golden set:** se actualiza cuando cambian reglas del contrato; evita cambios accidentales en respuestas.
+
+## Cómo escalar sin romper estructura
+
+- Agregar nuevos casos al golden set sin modificar el handler directamente.
+- Si se introducen tools mutables (Fase 7+), crear casos de golden set separados por permisos/auth.
+- Mantener tests de vector store sin “acoplar” a un artifact específico; validar errores claros.
 
 ---
 

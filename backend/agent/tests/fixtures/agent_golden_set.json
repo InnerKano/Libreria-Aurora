@@ -1,0 +1,45 @@
+{
+  "cases": [
+    {
+      "name": "free_text_query",
+      "message": "Busco novelas de realismo mágico",
+      "k": 3,
+      "prefer_vector": true,
+      "expected": {
+        "min_results": 1,
+        "actions": true
+      }
+    },
+    {
+      "name": "lookup_by_id",
+      "message": "ver libro 123",
+      "expected": {
+        "tool": "lookup_book",
+        "min_results": 1
+      }
+    },
+    {
+      "name": "lookup_by_isbn",
+      "message": "isbn 9780307474728",
+      "expected": {
+        "tool": "lookup_book",
+        "min_results": 1
+      }
+    },
+    {
+      "name": "filters",
+      "message": "categoria: Fantasia disponible",
+      "expected": {
+        "tool": "filter_catalog",
+        "min_results": 1
+      }
+    },
+    {
+      "name": "empty_message",
+      "message": "   ",
+      "expected": {
+        "error": "invalid_request"
+      }
+    }
+  ]
+}

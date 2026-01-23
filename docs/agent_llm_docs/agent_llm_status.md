@@ -67,6 +67,18 @@
 - La documentación refleja el contrato estable sin agregar tools mutables.
 - Endurecimiento del endpoint `/api/agent/`: parsing robusto de inputs, soporte de BYO key por header y tests adicionales de wiring.
 
+## Actualización: Fase 6 — evaluación y tests
+
+- [COMPLETADO] Golden set de conversaciones para regresión:
+	- Fixture: `backend/agent/tests/fixtures/agent_golden_set.json`
+	- Tests core: `backend/agent/tests/test_golden_set.py`
+- [COMPLETADO] Tests de prompts (asegura contexto mínimo en el prompt):
+	- `backend/agent/tests/test_prompts.py`
+- [COMPLETADO] Tests adicionales de parsing en API (clamp de `k`, bool-ish):
+	- `backend/apps/agent_api/tests/test_agent_chat_api.py`
+- [COMPLETADO] Smoke test opcional de vector DB (skippable por env):
+	- `backend/agent/tests/test_vector_smoke.py` (activar con `RUN_VECTOR_SMOKE=1`)
+
 ## Actualización: `llm_factory` (responsable, modular, escalable)
 
 ### Objetivo (por qué existe)

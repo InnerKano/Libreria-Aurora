@@ -145,3 +145,59 @@ def test_agent_chat_rejects_non_string_message(monkeypatch):
 
     assert response.status_code == 400
     assert captured["message"] is None
+
+
+def test_agent_chat_k_is_clamped_to_max(monkeypatch):
+    captured: dict = {}
+
+    def fake_handle_agent_message(message, **kwargs):
+        captured["k"] = kwargs.get("k")
+
+        class Resp:
+            error = None
+
+            def to_dict(self):
+                return {
+                    "message": "ok",
+                    "results": [],
+                    "actions": [],
+                }
+
+        return Resp()
+
+    monkeypatch.setattr("apps.agent_api.views.handle_agent_message", fake_handle_agent_message)
+
+    factory = APIRequestFactory()
+    request = factory.post("/api/agent/", {"message": "hola", "k": 999}, format="json")
+    response = AgentChatView.as_view()(request)
+
+    assert response.status_code == 200
+    assert captured["k"] == 50
+
+
+def test_agent_chat_parses_prefer_vector_boolish(monkeypatch):
+    captured: dict = {}
+
+    def fake_handle_agent_message(message, **kwargs):
+        captured["prefer_vector"] = kwargs.get("prefer_vector")
+
+        class Resp:
+            error = None
+
+            def to_dict(self):
+                return {
+                    "message": "ok",
+                    "results": [],
+                    "actions": [],
+                }
+
+        return Resp()
+
+    monkeypatch.setattr("apps.agent_api.views.handle_agent_message", fake_handle_agent_message)
+
+    factory = APIRequestFactory()
+    request = factory.post("/api/agent/", {"message": "hola", "prefer_vector": "false"}, format="json")
+    response = AgentChatView.as_view()(request)
+
+    assert response.status_code == 200
+    assert captured["prefer_vector"] is False
