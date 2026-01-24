@@ -16,9 +16,9 @@ from typing import Any, Dict, Optional
 from django.core.exceptions import ImproperlyConfigured
 
 try:
-    import openai  # type: ignore
+    from langchain_openai import ChatOpenAI
 except ImportError:  # pragma: no cover - se maneja en runtime
-    openai = None
+    ChatOpenAI = None
 
 logger = logging.getLogger(__name__)
 
@@ -102,32 +102,47 @@ class StubLLM:
 
 
 class OpenAICompatibleLLM:
-    """Cliente para endpoints OpenAI-compatible (OpenAI, vLLM, LM Studio, Ollama API)."""
+    """Cliente para endpoints OpenAI-compatible (OpenAI, vLLM, LM Studio, Ollama API).
+
+    Implementado con langchain_openai para mantener compatibilidad con el proyecto
+    de referencia y evitar acoplarse al cliente directo.
+    """
 
     def __init__(self, config: LLMConfig, api_key: str):
-        if openai is None:
+        if ChatOpenAI is None:
             raise ImproperlyConfigured(
-                "Falta la dependencia 'openai'. Instala openai>=1.30.0 para usar LLM_PROVIDER=openai_compatible."
+                "Falta la dependencia 'langchain_openai'. Instala langchain_openai>=0.3.18 para usar LLM_PROVIDER=openai_compatible."
             )
         self.config = config
-        self._client = openai.OpenAI(api_key=api_key, base_url=config.base_url or None, timeout=config.timeout_sec)
+        self._client = ChatOpenAI(
+            model=config.model,
+            api_key=api_key,
+            base_url=config.base_url or None,
+            timeout=config.timeout_sec,
+            max_tokens=config.max_tokens if config.max_tokens > 0 else None,
+        )
+
+    def _extract_usage(self, response: Any) -> tuple[Optional[int], Optional[int]]:
+        usage = getattr(response, "usage_metadata", None)
+        if isinstance(usage, dict):
+            return usage.get("input_tokens"), usage.get("output_tokens")
+
+        response_meta = getattr(response, "response_metadata", None) or {}
+        token_usage = response_meta.get("token_usage") or response_meta.get("usage") or {}
+        if isinstance(token_usage, dict):
+            return token_usage.get("prompt_tokens"), token_usage.get("completion_tokens")
+
+        return None, None
 
     def invoke(self, prompt: str, *, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         start = time.perf_counter()
-        response = self._client.chat.completions.create(
-            model=self.config.model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=self.config.max_tokens if self.config.max_tokens > 0 else None,
-            stream=False,
-        )
+        response = self._client.invoke(prompt)
         latency_ms = int((time.perf_counter() - start) * 1000)
-        choice = response.choices[0].message.content or ""
-        usage = getattr(response, "usage", None)
-        prompt_tokens = getattr(usage, "prompt_tokens", None) if usage else None
-        completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
+        content = getattr(response, "content", None) or ""
+        prompt_tokens, completion_tokens = self._extract_usage(response)
 
         return {
-            "content": choice,
+            "content": content,
             "provider": self.config.provider,
             "model": self.config.model,
             "latency_ms": latency_ms,
@@ -138,8 +153,22 @@ class OpenAICompatibleLLM:
         }
 
     async def ainvoke(self, prompt: str, *, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        # openai-python ya es async-friendly, pero aquí usamos el cliente sync para reducir dependencias.
-        return self.invoke(prompt, metadata=metadata)
+        start = time.perf_counter()
+        response = await self._client.ainvoke(prompt)
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        content = getattr(response, "content", None) or ""
+        prompt_tokens, completion_tokens = self._extract_usage(response)
+
+        return {
+            "content": content,
+            "provider": self.config.provider,
+            "model": self.config.model,
+            "latency_ms": latency_ms,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "error": None,
+            "prompt": prompt,
+        }
 
 
 def build_llm_runnable(*, byo_api_key: Optional[str] = None) -> Any:

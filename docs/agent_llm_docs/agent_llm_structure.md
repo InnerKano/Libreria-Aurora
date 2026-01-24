@@ -160,6 +160,66 @@ Regla importante:
 
 ---
 
+# Implementación: LLM OpenAI-compatible (Ollama)
+
+Esta sección documenta **la estructura**, **el porqué** y **dónde vive** la integración con un servidor
+OpenAI-compatible local (Ollama), manteniendo la arquitectura modular y responsable.
+
+## Objetivo (por qué existe)
+- Habilitar un LLM local sin acoplar el core a un proveedor específico.
+- Mantener un contrato estable para UI y tests, incluso si el LLM falla.
+- Permitir configuración por entorno sin tocar el código.
+
+## Dónde vive (archivos y responsabilidades)
+
+### Core reusable
+- `backend/agent/llm_factory.py`
+	- `load_llm_config()` lee variables `LLM_*` y valida política de costos/BYO.
+	- `build_llm_runnable(...)` crea el runnable del LLM o fallback a stub.
+	- `OpenAICompatibleLLM` usa `langchain_openai.ChatOpenAI` para servidores compatibles.
+
+- `backend/agent/prompts.py`
+	- `build_llm_prompt(...)` define formato, idioma y reglas de salida.
+	- `PromptConfig` controla bullets y longitud máxima.
+
+- `backend/agent/guardrails.py`
+	- `validate_llm_message(...)` evita JSON/código y exige bullets.
+
+- `backend/agent/agent_handler.py`
+	- `handle_agent_message(...)` orquesta retrieval + LLM.
+	- `_coerce_bullets(...)` re-formatea respuestas del LLM si no cumplen guardrails,
+	  evitando fallbacks innecesarios y manteniendo consistencia visual.
+
+### Configuración y dependencias
+- `backend/.env`
+	- `LLM_PROVIDER=openai_compatible`
+	- `LLM_MODEL=llama3.1:latest` (nombre exacto de Ollama)
+	- `LLM_BASE_URL=http://localhost:11434/v1`
+	- `LLM_API_KEY=local`
+
+- `backend/requirements.txt`
+	- `langchain_openai` habilita el cliente OpenAI-compatible sin acoplarse al SDK directo.
+
+## Flujo (cómo funciona)
+1) `AgentChatView` recibe el request y llama `handle_agent_message(...)`.
+2) `handle_agent_message` ejecuta retrieval y arma el prompt.
+3) `build_llm_runnable` crea el cliente OpenAI-compatible contra Ollama.
+4) La respuesta del LLM se valida con guardrails.
+5) Si no cumple formato, `_coerce_bullets` ajusta el texto en vez de degradar.
+
+## Por qué es escalable y responsable
+- **Modularidad:** el core no conoce HTTP ni headers; solo consume un runnable.
+- **Configuración por entorno:** cambiar de Ollama a OpenAI requiere solo `.env`.
+- **Resiliencia:** si el LLM falla, el endpoint mantiene contrato estable.
+- **Mantenibilidad:** el comportamiento se gobierna por guardrails y prompts explícitos.
+
+## Puntos de extensión (futuro)
+- Agregar proveedores adicionales dentro de `llm_factory.py` sin tocar el core.
+- Ajustar reglas de formato en `guardrails.py` y `prompts.py` sin cambios de wiring.
+- Añadir métricas por proveedor/latencia en `observability.py` si se requiere.
+
+---
+
 # Implementación actual (Fase 8 – Iteración 2): acciones mutables con auth
 
 Esta sección documenta **la estructura**, **los archivos** y **el porqué** de la integración de acciones mutables (carrito/reserva/estado) de forma segura, modular y mantenible.
@@ -241,6 +301,61 @@ Serializadores internos:
 - El frontend debe integrar `/api/agent/actions/` para ejecutar acciones mutables.
 - La UI debe enviar JWT y mapear acciones a payloads esperados.
 - Mantener el contrato estable evita acoplarse al proveedor LLM.
+
+---
+
+# Implementación actual (UI): barra lateral del agente (frontend)
+
+Esta sección documenta **qué se agregó en la UI**, **dónde vive**, y **por qué** se diseñó así
+para ser modular, responsable y mantenible.
+
+## Objetivo (por qué existe)
+- Exponer el asistente sin romper el layout actual ni tapar el `NavBar`.
+- Mantener una integración reversible y aislada (componente de barra lateral + chat).
+- Consumir el contrato estable del backend (`message/results/actions`) sin acoplarse al proveedor LLM.
+
+## Dónde vive (archivos y responsabilidades)
+
+### UI core (React)
+- `libreria-aurora/src/components/agent/AgentDrawer.jsx`
+	- Renderiza la **barra lateral izquierda**.
+	- Respeta el alto del `NavBar` con `topOffset` (`12vh`).
+	- No bloquea navegación superior (overlay solo bajo el nav).
+
+- `libreria-aurora/src/components/agent/AgentChat.jsx`
+	- Maneja el flujo del chat y las llamadas a:
+		- `POST /api/agent/` (read-only)
+		- `POST /api/agent/actions/` (acciones mutables con JWT)
+	- Mapea resultados (`results`) y ejecuta acciones (carrito/reserva/estado).
+	- Resuelve degradación con mensajes claros.
+
+### Integración global
+- `libreria-aurora/src/components/navBar.jsx`
+	- Botón de apertura del asistente (ícono de chat).
+	- Monta `AgentDrawer` para que esté disponible en todas las vistas.
+
+### Configuración API
+- `libreria-aurora/src/api/config.js`
+	- Endpoints agregados:
+		- `agentChat`, `agentSearch`, `agentActions`.
+
+## Flujo de UI (cómo funciona)
+1) Usuario pulsa el botón de asistente en el `NavBar`.
+2) Se abre la barra lateral izquierda sin cubrir el nav.
+3) El usuario escribe; `AgentChat` envía a `/api/agent/`.
+4) Se renderiza `message` + cards de resultados.
+5) Si hay JWT, se habilitan acciones mutables y se usa `/api/agent/actions/`.
+
+## Por qué es escalable y responsable
+- **Modularidad:** los componentes del agente están aislados en `components/agent/`.
+- **Contrato estable:** la UI usa solo `message/results/actions`.
+- **Seguridad:** acciones mutables requieren JWT y están deshabilitadas sin token.
+- **Mantenibilidad:** el drawer no altera rutas ni estados globales existentes.
+
+## Puntos de extensión (futuro)
+- Reutilizar `BookCard` para resultados del chat si se desea consistencia visual.
+- Integrar historial de conversación (persistencia opcional en localStorage).
+- Mostrar trazas (`trace`) solo en modo desarrollo.
 
 ---
 

@@ -19,6 +19,7 @@ cloudinary==1.36.0
 django-cloudinary-storage==0.3.0
 whitenoise==5.2.0
 qrcode>=0.18.0
+langchain_openai>=0.3.18,<0.4.0
 
 # --- Agent LLM / Vector DB (Chroma) ---
 # Used by notebooks/scripts under backend/agent/ to build and query the semantic index.

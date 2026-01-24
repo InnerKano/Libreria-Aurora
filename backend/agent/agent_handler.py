@@ -132,6 +132,43 @@ def _extract_filters(message: str) -> dict[str, Any]:
     return filters
 
 
+def _coerce_bullets(message: str, *, min_bullets: int = 2, max_bullets: int = 5) -> str:
+    text = (message or "").strip()
+    if not text:
+        return ""
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    bullet_markers = ("- ", "• ", "* ")
+    if any(line.startswith(bullet_markers) for line in lines):
+        return text
+
+    # Split into simple sentence-like chunks.
+    parts: list[str] = []
+    chunk = ""
+    for char in text:
+        chunk += char
+        if char in {".", "!", "?", "\n"}:
+            cleaned = chunk.strip()
+            if cleaned:
+                parts.append(cleaned)
+            chunk = ""
+    if chunk.strip():
+        parts.append(chunk.strip())
+
+    if not parts:
+        parts = [text]
+
+    bullets = [p.strip().rstrip(".") for p in parts if p.strip()]
+
+    if len(bullets) < min_bullets:
+        bullets.append("¿Quieres ver detalles del libro?")
+    if len(bullets) < min_bullets:
+        bullets.append("Puedo filtrar por autor, ISBN o categoría.")
+
+    bullets = bullets[:max_bullets]
+    return "\n".join(f"- {item}" for item in bullets)
+
+
 def handle_agent_message(
     message: Optional[str],
     *,
@@ -234,7 +271,12 @@ def handle_agent_message(
         }
         guard = validate_llm_message(final_message)
         if not guard.ok:
-            raise RuntimeError(f"LLM guardrails failed: {','.join(guard.errors)}")
+            coerced = _coerce_bullets(final_message)
+            if coerced and validate_llm_message(coerced).ok:
+                final_message = coerced
+                llm_meta["coerced"] = True
+            else:
+                raise RuntimeError(f"LLM guardrails failed: {','.join(guard.errors)}")
     except ImproperlyConfigured as e:
         record_counter("agent.llm_unconfigured")
         final_message = _build_fallback_message(

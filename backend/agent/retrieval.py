@@ -25,7 +25,7 @@ def _search_vector(query: str, k: int) -> list[dict[str, Any]]:
     resp = collection.query(
         query_texts=[query],
         n_results=k,
-        include=["documents", "metadatas", "distances", "ids"],
+        include=["documents", "metadatas", "distances"],
     )
 
     ids = (resp.get("ids") or [[]])[0]
