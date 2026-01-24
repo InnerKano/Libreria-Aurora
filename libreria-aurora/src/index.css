@@ -1,3 +1,11 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+	--nav-height: 12vh;
+}
+
+body {
+	padding-top: var(--nav-height);
+}

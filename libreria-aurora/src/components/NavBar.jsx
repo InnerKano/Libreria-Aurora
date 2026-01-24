@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { MessageCircle, Search, ShoppingCart, LogOut, User } from "lucide-react";
 import logo from "../images/Logo.svg";
@@ -21,11 +21,7 @@ function NavBar({ toggleSearch }) {
         AOS.init({ duration: 1000, easing: 'ease-in-out', once: false, mirror: true });
     }, []);
 
-    useEffect(() => {
-        getUserData();
-    }, []);
-
-    const getUserData = async () => {
+    const getUserData = useCallback(async () => {
         try {
             const token = localStorage.getItem("token");
             if (!token) {
@@ -49,7 +45,21 @@ function NavBar({ toggleSearch }) {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [backendURL]);
+
+    useEffect(() => {
+        getUserData();
+    }, [getUserData]);
+
+    const [scrolled, setScrolled] = useState(false);
+    
+    useEffect(() => {
+        const handleScroll = () => {
+            setScrolled(window.scrollY > 20);
+        };
+        window.addEventListener("scroll", handleScroll);
+        return () => window.removeEventListener("scroll", handleScroll);
+    }, []);
 
     const handleLogout = () => {
         localStorage.removeItem("username");
@@ -71,10 +81,19 @@ function NavBar({ toggleSearch }) {
         }
     };
 
+    // Determinar el alto dinámico del nav para el offset del AgentDrawer
+    const navHeight = scrolled ? '7vh' : '12vh';
+
+    useEffect(() => {
+        document.documentElement.style.setProperty("--nav-height", navHeight);
+    }, [navHeight]);
     return (
         <>
-            <nav className="h-[12vh] bg-[white] flex justify-between items-center p-[2vw] border-b-[.5vh] border-[#2B388C]" data-aos="fade-down">
-                <div className="flex justify-center items-center h-full" onClick={() => navigate('/')}>
+            <nav
+                className={`fixed top-0 left-0 w-full z-50 bg-[white] flex justify-between items-center border-b-[.5vh] border-[#2B388C] transition-all duration-300 ${scrolled ? 'h-[7vh] p-[1vw]' : 'h-[12vh] p-[2vw]'}`}
+                data-aos="fade-down"
+            >
+                <div className="flex justify-center items-center h-full" onClick={() => navigate('/')}> 
                     <img src={logo} alt="logo" className="h-[8vh]" />
                 </div>
 
@@ -103,7 +122,7 @@ function NavBar({ toggleSearch }) {
                     )}
                 </div>
             </nav>
-            <AgentDrawer isOpen={isAgentOpen} onClose={() => setIsAgentOpen(false)} />
+            <AgentDrawer isOpen={isAgentOpen} onClose={() => setIsAgentOpen(false)} topOffset={navHeight} />
         </>
     );
 }
