@@ -1,6 +1,9 @@
+import { useState } from "react";
 import AgentChat from "./AgentChat";
+import AgentStatusPanel from "./AgentStatusPanel";
 
 function AgentDrawer({ isOpen, onClose, topOffset = "12vh" }) {
+  const [activeTab, setActiveTab] = useState("chat");
   return (
     <>
       <div
@@ -15,16 +18,38 @@ function AgentDrawer({ isOpen, onClose, topOffset = "12vh" }) {
               <p className="text-sm font-semibold">Asistente Aurora</p>
               <p className="text-xs text-[#D9E1FF]">Catálogo y acciones rápidas</p>
             </div>
-            <button
-              className="text-white text-lg"
-              onClick={onClose}
-              aria-label="Cerrar asistente"
-            >
-              ×
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                  activeTab === "chat"
+                    ? "bg-white text-[#1B2459]"
+                    : "bg-white/10 text-white"
+                }`}
+                onClick={() => setActiveTab("chat")}
+              >
+                Chat
+              </button>
+              <button
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                  activeTab === "status"
+                    ? "bg-white text-[#1B2459]"
+                    : "bg-white/10 text-white"
+                }`}
+                onClick={() => setActiveTab("status")}
+              >
+                Estado
+              </button>
+              <button
+                className="text-white text-lg"
+                onClick={onClose}
+                aria-label="Cerrar asistente"
+              >
+                ×
+              </button>
+            </div>
           </div>
           <div className="flex-1 overflow-hidden p-4">
-            <AgentChat />
+            {activeTab === "chat" ? <AgentChat /> : <AgentStatusPanel />}
           </div>
         </div>
       </div>

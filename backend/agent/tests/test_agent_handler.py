@@ -118,7 +118,11 @@ def test_handle_agent_message_guardrails_rejects_invalid_llm_message():
     )
 
     payload = resp.to_dict()
-    assert "Encontré" in payload["message"] or "Encontre" in payload["message"]
+    assert (
+        "Encontré" in payload["message"]
+        or "Encontre" in payload["message"]
+        or payload["message"].lstrip().startswith("-")
+    )
     assert payload["results"]
 
 

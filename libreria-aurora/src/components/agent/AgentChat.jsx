@@ -2,6 +2,13 @@ import { useState } from "react";
 import { getApiUrl } from "../../api/config";
 
 const DEFAULT_K = 5;
+const LLM_TOGGLE_KEY = "agent_llm_enabled";
+
+const readLlmEnabled = () => {
+  if (typeof window === "undefined") return true;
+  const raw = localStorage.getItem(LLM_TOGGLE_KEY);
+  return raw !== "false";
+};
 
 const normalizeResult = (item) => {
   if (!item) return {};
@@ -41,6 +48,7 @@ function AgentChat({ onAction }) {
     setLoading(true);
 
     try {
+      const useLlm = readLlmEnabled();
       const response = await fetch(getApiUrl("/api/agent/"), {
         method: "POST",
         headers: {
@@ -50,6 +58,7 @@ function AgentChat({ onAction }) {
           message: text,
           k: DEFAULT_K,
           prefer_vector: true,
+          use_llm: useLlm,
           trace: false,
         }),
       });

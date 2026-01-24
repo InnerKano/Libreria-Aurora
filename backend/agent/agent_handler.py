@@ -174,6 +174,7 @@ def handle_agent_message(
     *,
     k: int = 5,
     prefer_vector: bool = True,
+    use_llm: bool = True,
     include_trace: bool = False,
     retrieval_fn: Optional[Callable[..., RetrievalResult]] = None,
     llm: Optional[Any] = None,
@@ -257,44 +258,53 @@ def handle_agent_message(
     final_message: str
     llm_started = time.monotonic()
 
-    try:
-        runnable = llm or build_llm_runnable(byo_api_key=byo_api_key)
-        prompt = build_llm_prompt(user_message=cleaned, retrieval=retrieval)
-        llm_resp = runnable.invoke(prompt)
-        final_message = (llm_resp or {}).get("content") or ""
-        record_counter("agent.llm_success")
-        llm_meta = {
-            "provider": (llm_resp or {}).get("provider"),
-            "model": (llm_resp or {}).get("model"),
-            "latency_ms": (llm_resp or {}).get("latency_ms"),
-            "error": (llm_resp or {}).get("error"),
-        }
-        guard = validate_llm_message(final_message)
-        if not guard.ok:
-            coerced = _coerce_bullets(final_message)
-            if coerced and validate_llm_message(coerced).ok:
-                final_message = coerced
-                llm_meta["coerced"] = True
-            else:
-                raise RuntimeError(f"LLM guardrails failed: {','.join(guard.errors)}")
-    except ImproperlyConfigured as e:
-        record_counter("agent.llm_unconfigured")
+    if not use_llm:
         final_message = _build_fallback_message(
             query=retrieval.query,
             results_count=len(retrieval.results),
             degraded=retrieval.degraded,
-            warnings=retrieval.warnings + [str(e)],
+            warnings=retrieval.warnings + ["LLM desactivado por el usuario"],
         )
-        llm_meta = {"error": str(e), "provider": "unconfigured"}
-    except Exception as e:
-        record_counter("agent.llm_failed")
-        final_message = _build_fallback_message(
-            query=retrieval.query,
-            results_count=len(retrieval.results),
-            degraded=retrieval.degraded,
-            warnings=retrieval.warnings + [f"LLM failed: {e}"],
-        )
-        llm_meta = {"error": str(e), "provider": "failed"}
+        llm_meta = {"provider": "disabled", "error": "disabled"}
+    else:
+        try:
+            runnable = llm or build_llm_runnable(byo_api_key=byo_api_key)
+            prompt = build_llm_prompt(user_message=cleaned, retrieval=retrieval)
+            llm_resp = runnable.invoke(prompt)
+            final_message = (llm_resp or {}).get("content") or ""
+            record_counter("agent.llm_success")
+            llm_meta = {
+                "provider": (llm_resp or {}).get("provider"),
+                "model": (llm_resp or {}).get("model"),
+                "latency_ms": (llm_resp or {}).get("latency_ms"),
+                "error": (llm_resp or {}).get("error"),
+            }
+            guard = validate_llm_message(final_message)
+            if not guard.ok:
+                coerced = _coerce_bullets(final_message)
+                if coerced and validate_llm_message(coerced).ok:
+                    final_message = coerced
+                    llm_meta["coerced"] = True
+                else:
+                    raise RuntimeError(f"LLM guardrails failed: {','.join(guard.errors)}")
+        except ImproperlyConfigured as e:
+            record_counter("agent.llm_unconfigured")
+            final_message = _build_fallback_message(
+                query=retrieval.query,
+                results_count=len(retrieval.results),
+                degraded=retrieval.degraded,
+                warnings=retrieval.warnings + [str(e)],
+            )
+            llm_meta = {"error": str(e), "provider": "unconfigured"}
+        except Exception as e:
+            record_counter("agent.llm_failed")
+            final_message = _build_fallback_message(
+                query=retrieval.query,
+                results_count=len(retrieval.results),
+                degraded=retrieval.degraded,
+                warnings=retrieval.warnings + [f"LLM failed: {e}"],
+            )
+            llm_meta = {"error": str(e), "provider": "failed"}
 
     llm_ms = int((time.monotonic() - llm_started) * 1000)
     record_timing("agent.llm_total_ms", llm_ms)

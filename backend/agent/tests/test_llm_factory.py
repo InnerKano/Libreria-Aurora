@@ -1,47 +1,26 @@
 """Tests for agent.llm_factory."""
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
 
-from agent.llm_factory import (
-    OpenAICompatibleLLM,
-    StubLLM,
-    build_llm_runnable,
-)
+from agent.llm_factory import OpenAICompatibleLLM, StubLLM, build_llm_runnable
 
 
-class _FakeChatResponse:
+class _FakeLCResponse:
     def __init__(self, content: str) -> None:
-        self.choices = [SimpleNamespace(message=SimpleNamespace(content=content))]
-        self.usage = SimpleNamespace(prompt_tokens=1, completion_tokens=1)
+        self.content = content
+        self.response_metadata = {
+            "token_usage": {"prompt_tokens": 1, "completion_tokens": 1}
+        }
 
 
-class _FakeChatCompletions:
-    def __init__(self, content: str) -> None:
-        self._content = content
+class _FakeChatOpenAI:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
+        self._content = kwargs.get("_fake_content", "respuesta")
 
-    def create(self, *args: Any, **kwargs: Any) -> _FakeChatResponse:  # noqa: ANN401
-        return _FakeChatResponse(self._content)
-
-
-class _FakeChat:
-    def __init__(self, content: str) -> None:
-        self.completions = _FakeChatCompletions(content)
-
-
-class _FakeOpenAIClient:
-    def __init__(self, content: str = "ok") -> None:
-        self.chat = _FakeChat(content)
-
-
-class _FakeOpenAI:
-    def __init__(self, content: str = "ok") -> None:
-        self._content = content
-
-    def OpenAI(self, *args: Any, **kwargs: Any) -> _FakeOpenAIClient:  # noqa: N802, ANN401
-        return _FakeOpenAIClient(self._content)
+    def invoke(self, prompt: str) -> _FakeLCResponse:
+        return _FakeLCResponse(self._content)
 
 
 @pytest.fixture(autouse=True)
@@ -92,9 +71,8 @@ def test_openai_compatible_uses_fake_client(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv("LLM_COST_MODE", "hybrid")
     monkeypatch.setenv("LLM_ALLOW_BYO_KEY", "true")
 
-    fake_openai = _FakeOpenAI(content="respuesta")
     monkeypatch.setenv("LLM_API_KEY", "server-key")
-    monkeypatch.setattr("agent.llm_factory.openai", fake_openai)
+    monkeypatch.setattr("agent.llm_factory.ChatOpenAI", _FakeChatOpenAI)
 
     llm = build_llm_runnable()
     assert isinstance(llm, OpenAICompatibleLLM)

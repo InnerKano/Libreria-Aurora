@@ -8,6 +8,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema
 
 from agent.agent_handler import handle_agent_action, handle_agent_message
+from agent.llm_factory import load_llm_config
 from agent.observability import (
     elapsed_ms,
     log_event,
@@ -16,6 +17,8 @@ from agent.observability import (
     truncate_text,
 )
 from agent.retrieval import search_catalog
+from agent.vector_store import load_vector_store_config
+from django.conf import settings
 
 
 def _parse_bool(value: object, *, default: bool) -> bool:
@@ -189,6 +192,7 @@ class AgentChatView(APIView):
                     "message": "Busco novelas de realismo mágico",
                     "k": 5,
                     "prefer_vector": True,
+                    "use_llm": True,
                     "trace": True,
                 },
                 request_only=True,
@@ -262,13 +266,25 @@ class AgentChatView(APIView):
         k_int = _parse_int(data.get("k", 5), default=5)
         prefer_vector = _parse_bool(data.get("prefer_vector", True), default=True)
         trace = _parse_bool(data.get("trace", False), default=False)
+        use_llm = _parse_bool(data.get("use_llm", True), default=True)
 
         byo_api_key = request.headers.get("X-LLM-API-Key")
+        if byo_api_key and not request.user.is_authenticated:
+            return Response(
+                {
+                    "error": "auth_required",
+                    "message": "Necesitas iniciar sesión para usar tu API key.",
+                    "results": [],
+                    "actions": [],
+                },
+                status=401,
+            )
 
         resp = handle_agent_message(
             message,
             k=k_int,
             prefer_vector=bool(prefer_vector),
+            use_llm=bool(use_llm),
             include_trace=bool(trace),
             byo_api_key=byo_api_key,
             request_id=request_id,
@@ -300,6 +316,89 @@ class AgentChatView(APIView):
             sampled_trace=sampled,
         )
         return response
+
+
+class AgentStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_scope = "agent_chat"
+
+    @extend_schema(
+        description=(
+            "Estado operativo del agente (solo lectura). "
+            "Expone configuración no sensible de LLM, vector DB, tools y límites."
+        ),
+        responses={
+            200: OpenApiResponse(response=OpenApiTypes.OBJECT),
+        },
+    )
+    def get(self, request):
+        llm_cfg = load_llm_config()
+        provider = llm_cfg.provider.strip().lower()
+        is_stub = provider in {"stub", "local_stub", "test"}
+        has_server_key = bool(llm_cfg.api_key)
+        byo_allowed = bool(llm_cfg.allow_byo_key)
+
+        if llm_cfg.cost_mode == "byo_key":
+            llm_available = False
+            llm_mode = "byo_key"
+            requires_byo_key = True
+        elif llm_cfg.cost_mode == "paid":
+            llm_available = has_server_key and not is_stub
+            llm_mode = "paid"
+            requires_byo_key = False
+        else:
+            llm_available = (has_server_key or byo_allowed) and not is_stub
+            llm_mode = "hybrid"
+            requires_byo_key = False
+
+        vector_cfg = load_vector_store_config()
+        vector_db_dir = str(vector_cfg.db_dir)
+        vector_manifest = str(vector_cfg.manifest_path) if vector_cfg.manifest_path else None
+        vector_ready = vector_cfg.db_dir.exists() and bool(vector_cfg.embedding_model)
+
+        throttle_rates = (getattr(settings, "REST_FRAMEWORK", {}) or {}).get(
+            "DEFAULT_THROTTLE_RATES", {}
+        )
+
+        payload = {
+            "llm": {
+                "provider": llm_cfg.provider,
+                "model": llm_cfg.model,
+                "base_url": llm_cfg.base_url,
+                "available": llm_available,
+                "mode": llm_mode,
+                "requires_byo_key": requires_byo_key,
+                "byo_key_allowed": byo_allowed,
+                "server_key_configured": has_server_key,
+                "timeout_sec": llm_cfg.timeout_sec,
+                "max_tokens": llm_cfg.max_tokens,
+                "cost_mode": llm_cfg.cost_mode,
+            },
+            "retrieval": {
+                "prefer_vector_default": True,
+                "vector_ready": vector_ready,
+                "vector_db_dir": vector_db_dir,
+                "vector_manifest": vector_manifest,
+                "collection": vector_cfg.collection,
+                "embedding_model": vector_cfg.embedding_model,
+                "normalize_embeddings": vector_cfg.normalize_embeddings,
+            },
+            "tools": {
+                "read_only": [
+                    "search_catalog",
+                    "lookup_book",
+                    "filter_catalog",
+                    "recommend_similar",
+                ],
+                "actions": ["add_to_cart", "reserve_book", "order_status"],
+                "actions_requires_auth": True,
+            },
+            "limits": {
+                "rate_limits": throttle_rates,
+            },
+        }
+
+        return Response(payload, status=200)
 
 
 class AgentActionView(APIView):

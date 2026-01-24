@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from rest_framework.test import APIRequestFactory
+from types import SimpleNamespace
+
+from rest_framework.test import APIRequestFactory, force_authenticate
 
 from apps.agent_api.views import AgentChatView
 
@@ -112,10 +114,31 @@ def test_agent_chat_byo_key_forwarding(monkeypatch):
         format="json",
         HTTP_X_LLM_API_KEY="test-key",
     )
+    user = SimpleNamespace(is_authenticated=True, id=1, pk=1)
+    force_authenticate(request, user=user)
     response = AgentChatView.as_view()(request)
 
     assert response.status_code == 200
     assert captured["byo_api_key"] == "test-key"
+
+
+def test_agent_chat_byo_key_requires_auth(monkeypatch):
+    def fake_handle_agent_message(message, **kwargs):
+        raise AssertionError("Should not be called without auth")
+
+    monkeypatch.setattr("apps.agent_api.views.handle_agent_message", fake_handle_agent_message)
+
+    factory = APIRequestFactory()
+    request = factory.post(
+        "/api/agent/",
+        {"message": "hola"},
+        format="json",
+        HTTP_X_LLM_API_KEY="test-key",
+    )
+    response = AgentChatView.as_view()(request)
+
+    assert response.status_code == 401
+    assert response.data["error"] == "auth_required"
 
 
 def test_agent_chat_rejects_non_string_message(monkeypatch):
