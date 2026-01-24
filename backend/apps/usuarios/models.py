@@ -32,6 +32,8 @@ class Usuario(AbstractUser):
     numero_identificacion = models.CharField(
         max_length=20,
         unique=True,
+        blank=True,
+        null=True,
         validators=[
             RegexValidator(
                 regex=r'^\d{8,20}$',
