@@ -9,12 +9,14 @@ import AdminForumMessages from "./profile/adminForumMessages";
 import Pedidos from "./profile/pedidos";
 import Reservas from "./profile/reservas";
 import AdminLibros from "./profile/adminLibros";
+import AdminUsers from "./profile/adminUsers";
 import GestionarTiendas from "./profile/gestionarTiendas";
 
 function MiPerfil() {
   const { isStaff, loading } = useIsStaff();
   const options = ['editar perfil', 'cambiar contraseña', 'gestion financiera','reservas', 'pedidos', 'foro'];
   const staffOptions = ['editar perfil', 'cambiar contraseña', 'pedidos', 'foro', 'gestionar libros', 'gestionar tiendas'];
+  const staffOptionsWithUsers = [...staffOptions.slice(0,5), 'gestionar usuarios', ...staffOptions.slice(5)];
   const [selectedOption, setSelectedOption] = useState('editar perfil');
 
   const renderContent = () => {
@@ -33,6 +35,8 @@ function MiPerfil() {
         return isStaff ? <AdminForumMessages/> : <ForumMessages/>;
       case 'gestionar libros':
         return isStaff && <AdminLibros/>;
+      case 'gestionar usuarios':
+        return isStaff && <AdminUsers />;
       case 'gestionar tiendas':
         return isStaff && <GestionarTiendas/>;
         
@@ -60,7 +64,7 @@ function MiPerfil() {
         <div className="w-full lg:w-[25%] lg:mr-6 mb-4 lg:mb-0">
           <div className="bg-white rounded-lg p-4 sticky top-4">
             <div className="flex flex-row lg:flex-col gap-2 lg:gap-4 overflow-x-auto lg:overflow-visible">
-              {(isStaff ? staffOptions : options).map((option, index) => (
+              {(isStaff ? staffOptionsWithUsers : options).map((option, index) => (
                 <button 
                   key={index} 
                   onClick={() => setSelectedOption(option)} 

@@ -11,11 +11,20 @@ class UsuarioSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'username', 'email', 'first_name', 'last_name',
             'tipo_usuario', 'numero_identificacion', 'telefono',
+            'is_staff',
             'direccion', 'fecha_nacimiento', 'fecha_registro',
             'ultima_actualizacion', 'activo', 'foto_perfil', 
             'nacionalidad', 'departamento'
         )
         read_only_fields = ('id', 'fecha_registro', 'ultima_actualizacion')
+
+
+class StaffToggleSerializer(serializers.Serializer):
+    is_staff = serializers.BooleanField()
+
+    def validate(self, attrs):
+        # simple validation placeholder; more rules enforced in view
+        return attrs
 
 class ProfileUpdateSerializer(serializers.ModelSerializer):
     """

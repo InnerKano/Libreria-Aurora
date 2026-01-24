@@ -567,3 +567,44 @@ El equipo de Librería Aurora
                 return Response(serializer.data)
 
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @extend_schema(
+        description="Permite a un usuario staff promover o remover el flag is_staff de otro usuario",
+        request=None,
+        responses={200: UsuarioSerializer, 400: {"description": "Bad request"}, 403: {"description": "Forbidden"}}
+    )
+    @action(detail=True, methods=['post'], url_path='set_staff')
+    def set_staff(self, request, pk=None):
+        """
+        Body: { "is_staff": true/false }
+        Solo usuarios con is_staff True pueden ejecutar esta acción.
+        No permite que un usuario se demueva a sí mismo.
+        """
+        actor = request.user
+        if not actor.is_authenticated or not actor.is_staff:
+            return Response({'detail': 'No tienes permisos para realizar esta acción.'}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            target = self.get_object()
+        except Exception:
+            return Response({'detail': 'Usuario no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # validar payload
+        is_staff_val = request.data.get('is_staff')
+        if is_staff_val is None:
+            return Response({'is_staff': 'Este campo es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Prevenir self-demote
+        if target.pk == actor.pk and not bool(is_staff_val):
+            return Response({'detail': 'No puedes quitarte el permiso a ti mismo.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # No tocar superuser desde aquí (no se permite is_superuser)
+        try:
+            target.is_staff = bool(is_staff_val)
+            target.save()
+            logger.info('Usuario %s ha modificado is_staff de usuario %s a %s', actor.username, target.username, target.is_staff)
+            serializer = UsuarioSerializer(target)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as exc:
+            logger.exception('Error al actualizar is_staff: %s', exc)
+            return Response({'detail': 'Error al actualizar el usuario.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

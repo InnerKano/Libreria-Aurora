@@ -2714,3 +2714,74 @@ Unificar la forma “correcta” de consumir portadas en todo el proyecto:
 - `compras` expone libros con `portada_url` (misma lógica que `libros`).
 - UI consume `portada_url` (con fallback controlado).
 - Se reduce duplicación y se mejora la coherencia entre módulos.
+
+**Gestión de Usuarios – Documentación de la actualización**
+
+- **Objetivo**  
+  - Permitir administración completa de usuarios desde el panel staff, alineado con el patrón ya usado en la gestión de libros.  
+  - Soporta edición parcial de campos clave, promoción/democión a staff y activación/desactivación de cuentas.
+
+- **Arquitectura y alcance**  
+  - Frontend: React (SPA) dentro de adminUsers.jsx.  
+  - Backend: Django REST Framework, `UsuarioViewSet` ya expone `PATCH` y acción `set_staff`; no se modificó backend en esta iteración.
+
+- **Flujo funcional**  
+  1) Staff entra a “Gestionar usuarios” en el perfil.  
+  2) Lista usuarios vía `GET /api/usuarios/`.  
+  3) Botón “Editar” abre modal con formulario.  
+  4) `PATCH /api/usuarios/{id}/` envía los cambios parciales.  
+  5) Toast de resultado y refresco de la tabla.
+
+- **Campos editables (modal)**  
+  - Identidad: email (req), nombre (req), apellido.  
+  - Cuenta: tipo_usuario (LECTOR/BIBLIOTECARIO/ADMIN), is_staff, activo.  
+  - Contacto: teléfono, dirección, nacionalidad.  
+  - Otros: fecha_nacimiento.  
+  - Username se muestra deshabilitado (no editable).
+
+- **Endpoints usados**  
+  - `GET /api/usuarios/` — lista de usuarios.  
+  - `PATCH /api/usuarios/{id}/` — actualización parcial de cualquier campo permitido por `UsuarioSerializer`.  
+  - `POST /api/usuarios/{id}/set_staff/` — sigue disponible para toggles rápidos (permanece staff-only y previene self-demote).
+
+- **Componente clave**  
+  - adminUsers.jsx  
+    - Hooks locales: `loading`, `users`, `selectedUser`, `modalOpen`, `formData`.  
+    - `fetchUsers()` carga la tabla con token Bearer.  
+    - `openModal(user)` prepara `formData` y abre el modal.  
+    - `handleSubmit()` limpia payload, valida mínimos (email, first_name) y hace `PATCH`.  
+    - UI: tabla con badges de `is_staff` y `activo`; modal responsive en 2 columnas con sección de checkboxes para staff/activo; toasts con Sonner; `LoadingSpinner` para carga inicial.
+
+- **Permisos y seguridad**  
+  - Lado backend: `UsuarioViewSet` (DRF ModelViewSet) exige autenticación; `set_staff` requiere `request.user.is_staff` y bloquea quitarse a sí mismo el staff.  
+  - Lado frontend: opción visible solo para usuarios staff (se integra desde `miPerfil.jsx` usando `useIsStaff`).
+
+- **Archivos relacionados**  
+  - Frontend:  
+    - adminUsers.jsx (nuevo formulario/modal).  
+    - miPerfil.jsx (ya integraba la opción “gestionar usuarios”).  
+  - Backend (referencia, sin cambios en esta iteración):  
+    - views.py (`UsuarioViewSet`, acción `set_staff`).  
+    - serializers.py (`UsuarioSerializer` expone los campos editables).
+
+- **Mantenimiento y extensibilidad**  
+  - Añadir/quitar campos: extender `formData`, inputs del modal y asegurarse que el backend permita el campo en `UsuarioSerializer`.  
+  - Validaciones adicionales: incluir reglas en frontend y en serializer para consistencia.  
+  - Roles avanzados: si se diferencian permisos entre ADMIN y BIBLIOTECARIO, ajustar visibilidad de opciones y agregar guardas en el backend (permisos custom).  
+  - Auditoría: agregar un modelo de log o signals para registrar cambios de rol/estado.  
+  - Tests pendientes (recomendado):  
+    - Frontend: tests de render y envío de `PATCH` con mocking de fetch.  
+    - Backend: ya existen tests para `set_staff`; agregar para `PATCH usuarios` si se amplían reglas.
+
+- **Consideraciones de escalabilidad**  
+  - La tabla hoy carga todo; si crece el volumen, añadir paginación/ búsqueda (`?search=`) y limitar campos.  
+  - Reducir round-trips: reusar la respuesta del `PATCH` para actualizar la fila en memoria sin recargar toda la lista.
+
+- **Cómo probar rápidamente**  
+  1) Autenticarse como staff y abrir “Gestionar usuarios”.  
+  2) Editar un usuario y guardar; verificar toasts y que la tabla refresque.  
+  3) Cambiar `is_staff` y `activo` para verificar badges y restricciones de backend.  
+  4) Revisar en el backend que `PATCH` responde 200 y aplica cambios.
+
+- **Resumen de valor**  
+  - Pasa de un toggle mínimo a una consola de edición completa, reutilizando el patrón de administración ya usado en libros, con mínima fricción y máxima cobertura de campos clave de usuario.
