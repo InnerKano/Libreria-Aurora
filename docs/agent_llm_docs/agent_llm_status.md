@@ -173,6 +173,13 @@ Cómo correrlos (local):
 - Error “Falta la dependencia 'openai'”: instala `openai>=1.30.0`.
 - Pylance marca imports no resueltos pero pytest funciona: el intérprete de VS Code no está apuntando al `backend/venv`.
 
+## Actualización: Iteración 1 — historial de chat (estatus actual)
+
+- [COMPLETADO] App dedicada `backend/apps/agent_history/` con modelos, serializers, servicios y endpoints (`GET/POST/DELETE /api/agent/history/`, `POST /api/agent/history/messages/`).
+- [COMPLETADO] Persistencia opcional desde `/api/agent/` cuando hay JWT y `save_history=true`.
+- [COMPLETADO] Migración inicial aplicada y tests de API del historial en verde.
+- Pendiente UI: cargar historial en el chat del frontend y mostrar mensajes previos al iniciar.
+
 ## Cómo reproducir el build (resumen)
 - Local: correr el notebook y dejar `DO_CLONE_REPO=False`, `DO_INSTALL_DEPS=False` (si tu venv ya está listo).
 - Colab: setear `DO_CLONE_REPO=True` + `DO_INSTALL_DEPS=True`, correr todo, y descargar `backend/agent/vector_db.zip`.

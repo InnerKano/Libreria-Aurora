@@ -17,6 +17,7 @@ from agent.observability import (
     truncate_text,
 )
 from agent.retrieval import search_catalog
+from apps.agent_history.services import get_or_create_active_conversation, record_message
 from agent.vector_store import load_vector_store_config
 from django.conf import settings
 
@@ -267,6 +268,7 @@ class AgentChatView(APIView):
         prefer_vector = _parse_bool(data.get("prefer_vector", True), default=True)
         trace = _parse_bool(data.get("trace", False), default=False)
         use_llm = _parse_bool(data.get("use_llm", True), default=True)
+        save_history = _parse_bool(data.get("save_history", True), default=True)
 
         byo_api_key = request.headers.get("X-LLM-API-Key")
         if byo_api_key and not request.user.is_authenticated:
@@ -298,6 +300,24 @@ class AgentChatView(APIView):
 
         response = Response(payload, status=status_code)
         response["X-Request-Id"] = request_id
+
+        if request.user.is_authenticated and message and not resp.error and save_history:
+            conversation = get_or_create_active_conversation(request.user)
+            record_message(
+                conversation,
+                "user",
+                message,
+                meta={"k": k_int, "prefer_vector": bool(prefer_vector)},
+            )
+            record_message(
+                conversation,
+                "assistant",
+                payload.get("message", ""),
+                meta={
+                    "results": payload.get("results", []),
+                    "actions": payload.get("actions", []),
+                },
+            )
 
         trace_payload = payload.get("trace") if isinstance(payload, dict) else None
         log_event(

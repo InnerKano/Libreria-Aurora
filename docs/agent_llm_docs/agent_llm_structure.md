@@ -712,3 +712,82 @@ Esto reduce flakiness: la lógica del core no depende de Django request lifecycl
 - Si agregas memoria/conversación:
 	- Evita guardar prompts crudos o datos sensibles.
 	- Diseña un `conversation_id` y un storage explícito (y documentado) en lugar de “magia” en el handler.
+
+---
+
+# Implementación actual (Iteración 1): historial de chat
+
+Esta sección documenta **la estructura**, **los archivos** y **las responsabilidades** de la Iteración 1 del historial de chat. El objetivo es mantener **modularidad**, **privacidad** y un **contrato estable** que permita escalar sin romper el core del agente.
+
+## Objetivo (por qué existe)
+
+- Persistir un **chat único por usuario** para continuidad.
+- Permitir análisis y métricas sin acoplarse al core del LLM.
+- Mantener la separación **core vs wiring** (sin contaminar el handler ni el API existente).
+
+## Dónde vive (estructura y archivos)
+
+### 1) App dedicada de historial (wiring + storage)
+
+**Ubicación:** `backend/apps/agent_history/`
+
+**Archivos clave:**
+- Modelos: `backend/apps/agent_history/models.py`
+	- `AgentConversation` (conversación única por usuario)
+	- `AgentMessage` (mensajes con `role`, `content`, `meta`)
+
+- Serializers: `backend/apps/agent_history/serializers.py`
+	- `AgentConversationSerializer`
+	- `AgentMessageSerializer`
+
+- Servicios: `backend/apps/agent_history/services.py`
+	- `get_or_create_active_conversation(user)`
+	- `record_message(conversation, role, content, meta=None)`
+	- `archive_active_conversations(user)`
+
+- Endpoints: `backend/apps/agent_history/views.py`
+	- `AgentHistoryView` (GET/POST/DELETE)
+	- `AgentHistoryMessageView` (POST)
+
+- Rutas: `backend/apps/agent_history/urls.py`
+	- `path("", AgentHistoryView.as_view(), ...)`
+	- `path("messages/", AgentHistoryMessageView.as_view(), ...)`
+
+- Migraciones: `backend/apps/agent_history/migrations/0001_initial.py`
+
+### 2) Integración mínima con el chat actual
+
+**Ubicación:** `backend/apps/agent_api/views.py`
+
+**Qué hace:**
+- En `AgentChatView.post(...)` se persiste el mensaje del usuario y la respuesta del asistente cuando:
+	- hay sesión válida (JWT)
+	- `save_history=true`
+	- no hubo error de request
+
+## Contrato y API (Iteración 1)
+
+- `GET /api/agent/history/` → devuelve conversación activa + mensajes.
+- `POST /api/agent/history/` → crea/retorna conversación activa.
+- `POST /api/agent/history/messages/` → agrega un mensaje puntual.
+- `DELETE /api/agent/history/` → archiva conversación activa y crea una nueva.
+
+**Autenticación:** obligatoria (JWT) para acceder a historial.
+
+## Por qué es modular y escalable
+
+- **Separación clara:** el core `backend/agent/` no conoce DB ni DRF.
+- **Wiring delgado:** el historial vive en su app (`agent_history`) y se conecta vía servicios.
+- **Extensible:** se pueden agregar métricas, retención o “archivos de conversación” sin tocar `agent_handler`.
+
+## Tests (mantenibilidad)
+
+- Tests API del historial:
+	- `backend/apps/agent_history/tests/test_history_api.py`
+	- Cubre: creación, mensajes, persistencia desde `/api/agent/`, archivado.
+
+## Puntos de extensión futuros
+
+- Agregar retención y borrado lógico (cron/management command).
+- Añadir paginación de mensajes.
+- Exponer métricas agregadas por conversación sin exponer contenido crudo.

@@ -91,6 +91,7 @@ INSTALLED_APPS = [
     'apps.mensajeria',
     'apps.recomendaciones',
     'apps.agent_api',
+    'apps.agent_history',
     'cloudinary_storage',
     'cloudinary',
 ]

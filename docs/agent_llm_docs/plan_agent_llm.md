@@ -202,6 +202,68 @@
 - **Acciones sin auth** → deshabilitar UI y mostrar CTA.
 - **Resultados vacíos** → fallback a recomendaciones de búsqueda o filtros.
 
+---
+
+## Anexo: historial de chat (planificación y análisis)
+
+### Objetivo (por qué existe)
+- Proveer un historial único de chat por usuario para continuidad y soporte.
+- Habilitar analítica responsable (uso, calidad, satisfacción) sin exponer datos sensibles.
+- Mantener el diseño modular: storage y API independientes del core LLM.
+
+### Principios de diseño (responsable y escalable)
+- **Un solo chat por usuario**: cada usuario tiene una conversación principal activa.
+- **Privacidad primero**: datos sensibles minimizados, truncados y con retención definida.
+- **Separación de capas**: core `agent/` no conoce la BD; el storage vive en una app dedicada.
+- **Auditoría y acceso controlado**: solo el usuario y roles autorizados pueden ver historiales.
+
+### Arquitectura propuesta (coherente con el repo)
+- **Nueva app Django**: `backend/apps/agent_history/`
+	- Responsabilidad: modelos, serializers DRF y endpoints del historial.
+- **Core reusable** (opcional, sin DRF): `backend/agent/history_store.py`
+	- Helpers puros para normalizar mensajes y limitar campos antes de persistir.
+- **Wiring DRF**: endpoints expuestos en `backend/apps/agent_history/` y registrados en `backend/config/urls.py`.
+
+### Modelo de datos (mínimo viable)
+- `AgentConversation`
+	- `user` (FK), `status` (active/archived), `created_at`, `updated_at`, `last_message_at`.
+- `AgentMessage`
+	- `conversation` (FK), `role` (user/assistant/system), `content`, `meta` (JSON), `created_at`.
+- Opcional futuro: `AgentEvent` para métricas agregadas (latencia, tokens, rating).
+
+### API propuesta (contratos)
+- `GET /api/agent/history/` → retorna el historial del usuario autenticado.
+- `POST /api/agent/history/` → crea o retorna la conversación única activa.
+- `POST /api/agent/history/messages/` → agrega mensaje (user/assistant) con validaciones.
+- `DELETE /api/agent/history/` → archivar conversación (soft delete) y crear una nueva vacía.
+
+### Integración con el flujo actual del chat
+- **Frontend**: `AgentChat` consulta historial al montar (si hay JWT) y muestra mensajes previos.
+- **Backend**: el endpoint `/api/agent/` puede opcionalmente persistir `message` y `response` si `save_history=true` y hay JWT.
+- **Modo invitado**: si no hay JWT, no se persiste (solo memoria local o vacío). Si no hay login no deberia haber acceso al historial.
+
+### Seguridad y privacidad
+- JWT obligatorio para acceder a historial.
+- Enmascarar o truncar campos sensibles (por ejemplo, `content` máx. N caracteres).
+- Retención configurable (ej. 90 días) con tarea de limpieza periódica.
+- Soportar “borrado lógico” por usuario (cumplimiento y UX).
+
+### Observabilidad y métricas (responsable)
+- Métricas agregadas por conversación: conteo de mensajes, tiempo medio de respuesta, errores.
+- No almacenar API keys ni trazas completas por defecto.
+- Sampling opcional de logs y `trace` solo en entornos de desarrollo.
+
+### Plan de implementación (iterativo)
+1) **Iteración 1 (MVP)**: modelos + endpoints básicos + persistencia desde `/api/agent/`.
+2) **Iteración 2**: UI con carga de historial + “continuar conversación”.
+3) **Iteración 3**: archivado, retención y borrado lógico.
+4) **Iteración 4**: métricas agregadas y panel admin.
+
+### Pruebas recomendadas
+- Unit: normalización de mensajes y límites de longitud.
+- API: auth requerida, CRUD básico del historial, archivado.
+- E2E: abrir chat, enviar mensaje, recargar y ver historial persistido.
+
 ## Riesgos y mitigaciones
 - **Alucinaciones sobre inventario/precio** → siempre validar contra BD via tools; no confiar en texto del LLM.
 - **Inconsistencia embeddings vs query** → fijar modelo y normalización en manifest; tests de smoke tras cada rebuild.
