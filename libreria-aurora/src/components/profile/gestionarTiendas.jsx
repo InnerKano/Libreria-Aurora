@@ -143,7 +143,7 @@ function Tiendas() {
                 <MapContainer
                 center={[4.6, -74.1]}
                 zoom={6}
-                style={{ height: "300px", borderRadius: "0.5rem" }}
+                style={{ height: "300px", borderRadius: "0.5rem", position: "sticky" }}
                 >
                 <TileLayer
                     attribution='&copy; OpenStreetMap contributors'
@@ -198,7 +198,7 @@ function Tiendas() {
                 <MapContainer
                     center={[4.6, -74.1]}
                     zoom={6}
-                    style={{ height: "400px", borderRadius: "0.5rem" }}
+                  style={{ height: "400px", borderRadius: "0.5rem", position: "sticky" }}
                 >
                     <TileLayer
                     attribution='&copy; OpenStreetMap contributors'
