@@ -180,6 +180,18 @@ Cómo correrlos (local):
 - [COMPLETADO] Migración inicial aplicada y tests de API del historial en verde.
 - Pendiente UI: cargar historial en el chat del frontend y mostrar mensajes previos al iniciar.
 
+## Próxima: Iteración 2 — UI con carga de historial y continuación de conversación
+
+- **Objetivo:** Integrar el frontend con endpoints de historial existentes; permitir cargar conversaciones previas y continuar.
+- **Alcance:**
+  - `AgentChat.jsx` (nuevo o ampliado): cargar historial al montar, renderizar mensajes previos, enviar nuevos con `save_history=true`.
+  - `AgentDrawer.jsx`: montar `AgentChat` y pasar JWT/user si está disponible.
+  - `api/config.js`: endpoints de historial (`GET /api/agent/history/`, `POST /api/agent/history/messages/`).
+  - Hook `useAgentChat` (opcional): centralizar lógica de estado para reutilización.
+- **Principios:** Modularidad (frontend no rompe backend), resiliencia (fallos controlados), privacidad (JWT obligatorio).
+- **Documentación:** Plan detallado en `docs/agent_llm_docs/agent_llm_structure.md` sección "Implementación prevista (Iteración 2)".
+- **Estado:** Planeada; aguardando señal de implementación.
+
 ## Cómo reproducir el build (resumen)
 - Local: correr el notebook y dejar `DO_CLONE_REPO=False`, `DO_INSTALL_DEPS=False` (si tu venv ya está listo).
 - Colab: setear `DO_CLONE_REPO=True` + `DO_INSTALL_DEPS=True`, correr todo, y descargar `backend/agent/vector_db.zip`.

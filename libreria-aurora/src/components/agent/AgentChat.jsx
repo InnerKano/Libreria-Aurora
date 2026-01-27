@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getApiUrl } from "../../api/config";
 
 const DEFAULT_K = 5;
@@ -8,6 +8,11 @@ const readLlmEnabled = () => {
   if (typeof window === "undefined") return true;
   const raw = localStorage.getItem(LLM_TOGGLE_KEY);
   return raw !== "false";
+};
+
+const readAuthToken = () => {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("token");
 };
 
 const normalizeResult = (item) => {
@@ -24,16 +29,113 @@ const normalizeResult = (item) => {
   };
 };
 
+const INITIAL_GREETING = {
+  role: "assistant",
+  content: "Hola 👋 Soy tu asistente del catálogo. ¿Qué libro buscas?",
+};
+
 function AgentChat({ onAction }) {
   const [messages, setMessages] = useState([
-    {
-      role: "assistant",
-      content: "Hola 👋 Soy tu asistente del catálogo. ¿Qué libro buscas?",
-    },
+    INITIAL_GREETING,
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [orderId, setOrderId] = useState("");
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const scrollContainerRef = useRef(null);
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const token = readAuthToken();
+    setIsAuthenticated(!!token);
+    if (!token) return;
+
+    const loadHistory = async () => {
+      setHistoryLoading(true);
+      setHistoryError("");
+      try {
+        const response = await fetch(getApiUrl("/api/agent/history/"), {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.status === 401) {
+          if (!cancelled) {
+            setHistoryError("Tu sesión expiró. Inicia sesión para ver tu historial.");
+          }
+          return;
+        }
+
+        const data = await response.json();
+        if (!response.ok) {
+          if (!cancelled) {
+            setHistoryError(data?.message || "No se pudo cargar el historial.");
+          }
+          return;
+        }
+
+        const historyMessages = (data?.messages || [])
+          .map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+            meta: msg.meta || {},
+            results: Array.isArray(msg?.meta?.results) ? msg.meta.results : [],
+            actions: Array.isArray(msg?.meta?.actions) ? msg.meta.actions : [],
+            fromHistory: true,
+          }))
+          .filter((msg) => msg.content);
+
+        if (!cancelled && historyMessages.length > 0) {
+          setMessages(historyMessages);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setHistoryError("No pude cargar tu historial. Intenta más tarde.");
+        }
+      } finally {
+        if (!cancelled) {
+          setHistoryLoading(false);
+        }
+      }
+    };
+
+    loadHistory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const threshold = 120;
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      const atBottom = distanceFromBottom <= threshold;
+      setShowScrollButton(!atBottom);
+    };
+
+    handleScroll();
+    container.addEventListener("scroll", handleScroll);
+
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showScrollButton && bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, showScrollButton]);
 
   const appendMessage = (message) => {
     setMessages((prev) => [...prev, message]);
@@ -48,11 +150,14 @@ function AgentChat({ onAction }) {
     setLoading(true);
 
     try {
+      const token = readAuthToken();
+      const saveHistory = !!token;
       const useLlm = readLlmEnabled();
       const response = await fetch(getApiUrl("/api/agent/"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           message: text,
@@ -60,6 +165,7 @@ function AgentChat({ onAction }) {
           prefer_vector: true,
           use_llm: useLlm,
           trace: false,
+          save_history: saveHistory,
         }),
       });
 
@@ -96,7 +202,7 @@ function AgentChat({ onAction }) {
   };
 
   const handleAction = async (action, payload) => {
-    const token = localStorage.getItem("token");
+    const token = readAuthToken();
     if (!token) {
       appendMessage({
         role: "assistant",
@@ -147,11 +253,27 @@ function AgentChat({ onAction }) {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+    <div className="relative flex h-full flex-col">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto space-y-4 pr-2 pb-2">
+        {!isAuthenticated && (
+          <div className="rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-xs text-[#1B2459]">
+            Inicia sesión para guardar tu historial de conversación.
+          </div>
+        )}
+        {historyLoading && (
+          <div className="rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-xs text-[#1B2459]">
+            Cargando historial...
+          </div>
+        )}
+        {historyError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            {historyError}
+          </div>
+        )}
         {messages.map((msg, index) => {
           const isUser = msg.role === "user";
           const results = (msg.results || []).map(normalizeResult).filter((item) => item.titulo);
+          const showHistoryResults = msg.fromHistory && results.length > 0;
 
           return (
             <div key={`${msg.role}-${index}`} className="space-y-2">
@@ -165,7 +287,25 @@ function AgentChat({ onAction }) {
                 {msg.content}
               </div>
 
-              {!isUser && results.length > 0 && (
+              {!isUser && showHistoryResults && (
+                <div className="rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs text-[#1B2459]">
+                  <p className="mb-2 text-[11px] font-semibold uppercase text-gray-500">
+                    Libros consultados
+                  </p>
+                  <ul className="space-y-1">
+                    {results.map((item) => (
+                      <li key={item.libro_id || item.titulo} className="flex flex-col">
+                        <span className="text-sm font-semibold text-[#1B2459]">{item.titulo}</span>
+                        {item.autor && (
+                          <span className="text-[11px] text-gray-500">{item.autor}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {!isUser && !msg.fromHistory && results.length > 0 && (
                 <div className="space-y-3">
                   {results.map((item) => (
                     <div
@@ -202,9 +342,34 @@ function AgentChat({ onAction }) {
             </div>
           );
         })}
+        {showScrollButton && (
+          <div className="sticky bottom-3 flex justify-center">
+            <button
+              type="button"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1B2459] text-white shadow-lg opacity-50"
+              onClick={() => bottomRef.current?.scrollIntoView({ behavior: "smooth" })}
+              aria-label="Ir al final del chat"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4 w-4"
+                aria-hidden="true"
+              >
+                <path d="M12 5v14" />
+                <path d="M7 14l5 5 5-5" />
+              </svg>
+            </button>
+          </div>
+        )}
+        <div ref={bottomRef} />
       </div>
 
-      <div className="mt-4 flex flex-col gap-2">
+      <div className="mt-3 flex flex-col gap-2">
         <textarea
           rows={2}
           value={input}
@@ -222,7 +387,7 @@ function AgentChat({ onAction }) {
         </button>
         <div className="flex items-center gap-2">
           {(() => {
-            const hasToken = !!localStorage.getItem("token");
+            const hasToken = !!readAuthToken();
             const parsedOrderId = Number(orderId);
             const canSubmit = hasToken && orderId && !Number.isNaN(parsedOrderId);
 

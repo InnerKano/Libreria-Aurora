@@ -791,3 +791,286 @@ Esta sección documenta **la estructura**, **los archivos** y **las responsabili
 - Agregar retención y borrado lógico (cron/management command).
 - Añadir paginación de mensajes.
 - Exponer métricas agregadas por conversación sin exponer contenido crudo.
+
+---
+
+# Implementación prevista (Iteración 2): UI con carga de historial y continuación
+
+## Objetivo (por qué existe)
+
+- Cargar el historial de chat cuando el usuario abre el drawer (si está autenticado).
+- Mostrar mensajes previos sin necesidad de reimplementar la conversación.
+- Permitir "continuar" desde donde se quedó, manteniendo contexto y privacidad.
+- Mantener modularidad: cambios en frontend no rompen backend, y viceversa.
+
+## Contratos y flujos (arquitectura de integración)
+
+### Contrato de carga de historial (GET `/api/agent/history/`)
+
+Respuesta (200 OK):
+```json
+{
+  "conversation": {
+    "id": int,
+    "user": int,
+    "status": "active",
+    "created_at": "2026-01-26T...",
+    "updated_at": "2026-01-26T...",
+    "message_count": 5
+  },
+  "messages": [
+    {
+      "id": int,
+      "role": "user",
+      "content": "Busca libros de ciencia ficción",
+      "created_at": "2026-01-26T...",
+      "meta": {}
+    },
+    {
+      "id": int,
+      "role": "assistant",
+      "content": "Encontré 3 libros...",
+      "created_at": "2026-01-26T...",
+      "meta": {}
+    }
+  ]
+}
+```
+
+Respuesta sin autenticación (401 Unauthorized): se renderiza el chat vacío (modo guest).
+
+### Contrato de flujo de chat (POST `/api/agent/` + persistencia)
+
+Al enviar un mensaje con `save_history=true` y JWT válido:
+1. El endpoint `/api/agent/` responde con `message` + `results` + `actions`.
+2. Paralelamente (o en post-hook), `/api/agent/history/messages/` persiste el mensaje del usuario y el del asistente.
+3. El frontend renderiza el mensaje + historial se actualiza en BD.
+
+### Flujo de lógica en el frontend
+
+1. **Al montar `AgentChat`** (si hay JWT):
+   - GET `/api/agent/history/` → obtiene conversación + mensajes.
+   - Renderiza los mensajes previos (display-only).
+
+2. **Al enviar un mensaje**:
+   - POST `/api/agent/` con `message` + `save_history=true`.
+   - Renderiza la respuesta.
+   - Opcionalmente (si quiere garantía de persistencia): POST `/api/agent/history/messages/` si no se persistió automáticamente.
+
+3. **En modo guest (sin JWT)**:
+   - GET `/api/agent/history/` retorna 401.
+   - El frontend mostrará un CTA de "Inicia sesión para guardar tu historial".
+   - El chat funciona en memoria (local state).
+
+## Archivos involucrados y responsabilidades
+
+### Backend (ya existen, ajustes mínimos)
+
+**`backend/apps/agent_history/views.py`**
+- Endpoint `GET /api/agent/history/` ya existe; asegurarse que retorna `message_count` para paginación futura.
+- Endpoint `POST /api/agent/history/messages/` ya existe; se usa si el frontend quiere persistencia explícita.
+
+**`backend/apps/agent_api/views.py`**
+- Endpoint `/api/agent/` ya persiste mensajes cuando `save_history=true` y hay JWT.
+- Se puede añadir flag `persist_history_confirmation` en respuesta para que frontend sepa si se guardó.
+
+### Frontend (implementar en Iteración 2)
+
+**`libreria-aurora/src/components/agent/AgentChat.jsx`** (nuevo o ampliado)
+- **Responsabilidad:** lógica del chat conversacional.
+- **Qué debe hacer:**
+  - `useEffect` con dependencia `[user, jwt]`:
+    - Si hay JWT, llamar `GET /api/agent/history/`.
+    - Renderizar mensajes previos en estado local.
+  - Formulario de input para nuevos mensajes.
+  - Al enviar: POST `/api/agent/` con `save_history=true`.
+  - Renderizar nuevos mensajes (usuario + asistente) en la lista.
+
+**`libreria-aurora/src/components/agent/AgentDrawer.jsx`**
+- **Responsabilidad:** contenedor visual de la barra lateral.
+- **Cambios:** importar y montar `AgentChat`.
+- No necesita cambios grandes; solo asegurar que pasa `user` y `jwt` si están disponibles.
+
+**`libreria-aurora/src/api/config.js`**
+- **Responsabilidad:** configuración de endpoints.
+- **Qué debe tener:**
+  - Endpoints para historial (si no están):
+    - `GET /api/agent/history/` (agentHistory.get)
+    - `POST /api/agent/history/` (agentHistory.create)
+    - `POST /api/agent/history/messages/` (agentHistory.addMessage)
+
+**`libreria-aurora/src/hooks/`** (opcional, nuevo hook personalizado)
+- **Propuesta:** crear un hook `useAgentChat` que centralice la lógica de carga de historial, manejo de estado y persistencia.
+- **Beneficio:** reutilizable en otros componentes si se amplía la UI del agente.
+
+## Principios de diseño (responsable, modular, escalable)
+
+### 1. Separación de responsabilidades
+- **Backend persiste:** datos validados, con JWT, respetando integridad.
+- **Frontend visualiza:** historial persistido, pero también mantiene estado local para UX sin lag.
+- **API contrato estable:** no cambia si la UI evoluaciona o se añaden canales.
+
+### 2. Modo guest vs autenticado
+- Sin JWT: chat en memoria (localStorage opcional), no hay acceso a `/api/agent/history/`.
+- Con JWT: carga historial persistido, puede guardar (si `save_history=true`).
+- Transición suave: si usuario inicia sesión mientras chatea en modo guest, su historial local se puede ignorar o fusionar (decisión de negocio futura).
+
+### 3. Resiliencia y manejo de errores
+- Si `GET /api/agent/history/` falla (timeout/500): renderizar chat vacío con advertencia y permitir enviar mensajes.
+- Si `POST /api/agent/` falla: mostrar error pero no reintentar persistencia automáticamente (user control).
+- Si `POST /api/agent/history/messages/` falla (solo si es explícito): mostrar CTA de "Reintentar guardar".
+
+### 4. Paginación futura (extensible sin romper contrato)
+- Respuesta de `GET /api/agent/history/` incluye `message_count`.
+- Frontend puede usar query params: `?page=1&per_page=10` en futuro.
+- Backend lo ignora ahora; lo habilita en Iteración 3 sin cambiar API.
+
+## Tareas concretas para implementar
+
+### Backend (validación y ajustes)
+1. Confirmar que `/api/agent/history/` retorna respuesta con estructura correcta.
+2. Confirmar que POST `/api/agent/` persiste mensajes cuando `save_history=true`.
+3. Tests manuales: GET historial, enviar mensaje, recibir, confirmar persistencia.
+
+### Frontend (implementación nueva)
+1. Crear o ampliar `AgentChat.jsx`:
+   - Hook `useEffect` para cargar historial al montar.
+   - Estado local para mensajes (combina historial + nuevos).
+   - Handlers para input y envío de mensajes.
+
+2. Actualizar `AgentDrawer.jsx` para montar `AgentChat`.
+
+3. Crear o actualizar endpoints en `api/config.js`.
+
+4. Tests:
+   - Test que al montar con JWT, se carga historial.
+   - Test que al enviar un mensaje, se renderiza y se persiste (mock de API).
+   - Test que sin JWT, no se carga historial (401 esperado).
+
+## Validaciones de seguridad y privacidad
+
+- **JWT obligatorio:** `/api/agent/history/` retorna 401 si no hay token válido.
+- **Truncado de contenido:** respuesta de historial no incluye campos sensibles (por ejemplo, `trace` completo).
+- **Rate limiting:** mantener `throttle_scope` en endpoints de historial para evitar abuso de lectura.
+- **Logs seguros:** no registrar contenido completo de mensajes en desarrollo.
+
+## Decisiones de diseño (por qué se hacen así)
+
+### ¿Por qué `useEffect` con dependencia `[user, jwt]`?
+- Evita llamadas innecesarias si el usuario o token no cambian.
+- Si el usuario inicia sesión, se recarga automáticamente.
+
+### ¿Por qué `save_history=true` como flag opcional en POST `/api/agent/`?
+- Permite que el frontend controle cuándo guardar (por ejemplo, solo guardar mensajes útiles).
+- En futuro, se puede añadir una UI de "No guardar esta conversación" por privacidad.
+
+### ¿Por qué no usar localStorage para historial local?
+- Simplifica la Iteración 2: enfoque es cargar historial persistido.
+- localStorage se puede añadir en Iteración 3 como mejora de offline.
+
+### ¿Por qué no paginar automáticamente?
+- Iteración 2 es MVP: cargar todo el historial es suficiente para la mayoría de usuarios.
+- Si el historial crece (100+ mensajes), se puede optimizar en Iteración 3 con paginación.
+
+## Cómo escalar sin romper
+
+### Si se añade paginación (Iteración 3)
+- Backend habilita `?page=1&per_page=10` sin cambiar estructura actual.
+- Frontend actualiza `useEffect` para manejar paginación.
+- API contrato permanece estable.
+
+### Si se añade búsqueda en historial
+- Nuevo endpoint: `GET /api/agent/history/search/?q=<texto>`.
+- Frontend usa nuevo hook `useHistorySearch`.
+- Historial base (`GET /api/agent/history/`) no cambia.
+
+### Si se integra análisis/rating de conversaciones
+- Nuevo campo en `AgentConversation`: `rating`, `useful_count`.
+- Endpoint para actualizar: `PATCH /api/agent/history/{id}/rating/`.
+- Frontend añade UI de stars/thumbs sin afectar chat.
+
+## Resumen de responsabilidades por iteración
+
+| Iteración | Backend | Frontend | Estado |
+|-----------|---------|----------|--------|
+| 1 (MVP) | Modelos, endpoints CRUD, persistencia desde /api/agent/ | N/A | ✅ Completado |
+| 2 (esta) | Validaciones, ajustes de respuesta | Cargar historial, mostrar, continuar conversación | 📋 Por hacer |
+| 3 | Paginación, archivado, retención | Paginación UI, "Nueva conversación", historial anterior | Pendiente |
+| 4 | Métricas agregadas, dashboard admin | Panel de estadísticas (futuro) | Pendiente |
+
+---
+
+# Implementación actual (Iteración 2): UI con carga de historial y continuación
+
+Esta sección documenta **cómo quedó implementada** la Iteración 2 en el frontend, con enfoque en estructura, responsabilidades y mantenibilidad.
+
+## Objetivo (por qué existe)
+
+- Recuperar historial desde backend cuando hay JWT.
+- Mantener un flujo conversacional continuo, sin romper el contrato `message/results/actions`.
+- Mantener la UI modular (componentes aislados) y escalable para paginación futura.
+
+## Dónde vive (archivos y responsabilidades)
+
+### 1) UI del chat (principal)
+
+**Archivo:** `libreria-aurora/src/components/agent/AgentChat.jsx`
+
+**Responsabilidades principales:**
+- Cargar historial en `useEffect()` cuando existe token.
+- Mostrar mensajes previos y nuevos en el mismo estado local.
+- Enviar mensajes al endpoint conversacional con `save_history=true` si hay JWT.
+- Mostrar estados de error y CTA para usuarios invitados.
+
+**Funciones internas clave (para mantenimiento):**
+- `readAuthToken()` → lectura segura del JWT desde `localStorage`.
+- `readLlmEnabled()` → toggle de LLM en UI (persistente en `localStorage`).
+- `handleSend()` → envío de mensaje a `/api/agent/` y render de respuesta.
+- `handleAction()` → envío de acciones mutables a `/api/agent/actions/` (ya existente).
+
+**Flujo real de carga de historial:**
+1) Detecta token en `useEffect()`.
+2) Llama `GET /api/agent/history/` con `Authorization: Bearer`.
+3) Si responde con mensajes, reemplaza el estado local de `messages` con el historial.
+4) Si falla, muestra banner de error y permite continuar en modo local.
+
+**Estados UI agregados (responsables):**
+- `historyLoading` → indicador de carga de historial.
+- `historyError` → error legible si falla la carga.
+- `isAuthenticated` → define si se muestra CTA “inicia sesión”.
+
+### 2) Configuración de endpoints
+
+**Archivo:** `libreria-aurora/src/api/config.js`
+
+**Endpoints añadidos para Iteración 2:**
+- `agentHistory: "/api/agent/history/"`
+- `agentHistoryMessages: "/api/agent/history/messages/"`
+
+**Responsabilidad:** asegurar URLs centralizadas y consistentes para futuras extensiones (paginación, búsqueda).
+
+## Decisiones de diseño (por qué es escalable)
+
+### 1) Carga de historial solo si hay JWT
+- Evita llamadas innecesarias y errores 401 visibles al usuario invitado.
+- Respeta el principio de privacidad: el historial solo existe para usuarios autenticados.
+
+### 2) Estado local como fuente de UX
+- El historial se carga una vez y se mezcla con mensajes nuevos localmente.
+- No bloquea el envío si el backend falla (degradación controlada).
+
+### 3) `save_history=true` controlado desde frontend
+- La persistencia queda explícita y habilita futuros toggles de privacidad.
+- Permite evolucionar a “no guardar esta conversación” sin tocar backend.
+
+## Impacto en mantenimiento
+
+- Los cambios quedaron **aislados** en `AgentChat.jsx` y `config.js`.
+- No se modificó el core del agente ni el wiring DRF (cumple separación de capas).
+- El diseño permite añadir paginación sin reestructurar la UI actual.
+
+## Puntos de extensión futuros (sin romper lo actual)
+
+- **Paginación:** añadir query params en `GET /api/agent/history/` y manejar estados de carga incremental.
+- **Búsqueda en historial:** nuevo endpoint y un hook dedicado (`useHistorySearch`).
+- **Indicador de persistencia:** si backend expone `persist_history_confirmation`, se puede renderizar un badge en cada mensaje.

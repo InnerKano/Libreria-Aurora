@@ -41,7 +41,9 @@ const config = {
     // Agente LLM
     agentChat: "/api/agent/",
     agentSearch: "/api/agent/search/",
-    agentActions: "/api/agent/actions/"
+    agentActions: "/api/agent/actions/",
+    agentHistory: "/api/agent/history/",
+    agentHistoryMessages: "/api/agent/history/messages/"
   }
 };
 
