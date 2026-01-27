@@ -9,7 +9,10 @@ function BookCard({ book, color = "black" }) {
   };
 
   return (
-    <div onClick={handleNavigate} className="relative w-[15vw] h-[60vh] p-[1vw] flex flex-col items-center justify-between shadow-md rounded-xl cursor-pointer transition-transform duration-300 ease-in-out hover:scale-105 group overflow-hidden" >
+    <div
+      onClick={handleNavigate}
+      className="relative w-40 sm:w-48 md:w-52 lg:w-56 xl:w-60 p-3 sm:p-4 flex flex-col items-center justify-between shadow-md rounded-xl cursor-pointer transition-transform duration-300 ease-in-out hover:scale-105 group overflow-hidden"
+    >
 
       <div className="w-full aspect-[2/3] overflow-hidden rounded-md relative">
         <img
@@ -28,16 +31,16 @@ function BookCard({ book, color = "black" }) {
 
       {/* Información básica */}
       <div className="w-full text-center mt-2">
-        <p className="text-[1.2vw] font-semibold truncate" style={{ color }}>
+        <p className="text-sm sm:text-base font-semibold truncate" style={{ color }}>
           {book.titulo}
         </p>
-        <p className="text-[1vw] font-light" style={{ color }}>
+        <p className="text-xs sm:text-sm font-light" style={{ color }}>
           {book.author}
         </p>
-        <p className="text-[1vw] font-light" style={{ color }}>
+        <p className="text-xs sm:text-sm font-light" style={{ color }}>
           Año: {book.año_publicacion}
         </p>
-        <p className="text-[1vw] font-medium" style={{ color }}>
+        <p className="text-xs sm:text-sm font-medium" style={{ color }}>
           ${book.precio}
         </p>
       </div>
