@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Carrito, HistorialDeCompras, Pedidos, CarritoLibro, PedidoLibro, Reserva
+from .models import Carrito, HistorialDeCompras, Pedidos, CarritoLibro, PedidoLibro, Reserva, Devolucion, DevolucionItem
 from apps.libros.serializers import LibroSerializer as LibroPublicSerializer
 from apps.usuarios.serializers import UsuarioSerializer
 
@@ -104,6 +104,43 @@ class AdminHistorialDeComprasSerializer(serializers.ModelSerializer):
         model = HistorialDeCompras
         fields = ['id', 'usuario', 'pedido', 'fecha']
         read_only_fields = ['id', 'usuario', 'pedido', 'fecha']
+
+
+class DevolucionItemSerializer(serializers.ModelSerializer):
+    libro = LibroPublicSerializer(read_only=True)
+    libro_id = serializers.IntegerField(write_only=True, required=False)
+
+    class Meta:
+        model = DevolucionItem
+        fields = ['id', 'libro', 'libro_id', 'cantidad']
+
+
+class DevolucionSerializer(serializers.ModelSerializer):
+    items = DevolucionItemSerializer(many=True, read_only=True)
+    pedido = PedidosSerializer(read_only=True)
+
+    class Meta:
+        model = Devolucion
+        fields = ['id', 'pedido', 'estado', 'fecha_solicitud', 'fecha_resolucion', 'token', 'items']
+        read_only_fields = ['id', 'pedido', 'estado', 'fecha_solicitud', 'fecha_resolucion', 'token', 'items']
+
+
+class DevolucionAdminSerializer(serializers.ModelSerializer):
+    items = DevolucionItemSerializer(many=True, read_only=True)
+    pedido = AdminPedidosSerializer(read_only=True)
+
+    class Meta:
+        model = Devolucion
+        fields = ['id', 'pedido', 'estado', 'fecha_solicitud', 'fecha_resolucion', 'token', 'items']
+        read_only_fields = ['id', 'pedido', 'estado', 'fecha_solicitud', 'fecha_resolucion', 'token', 'items']
+
+
+class DevolucionConfirmarSerializer(serializers.Serializer):
+    items = DevolucionItemSerializer(many=True)
+
+
+class DevolucionActualizarEstadoSerializer(serializers.Serializer):
+    estado = serializers.ChoiceField(choices=Devolucion.estado_choices)
         
 class CambiarEstadoPedidoSerializer(serializers.Serializer):
     pedido_id = serializers.IntegerField()
@@ -120,6 +157,19 @@ class CambiarEstadoPedidoSerializer(serializers.Serializer):
         estados_validos = [estado[0] for estado in Pedidos.estado_choices]
         if value not in estados_validos:
             raise serializers.ValidationError("Estado no válido.")
+        return value
+
+
+class PedidoOverrideSerializer(serializers.Serializer):
+    pedido_id = serializers.IntegerField()
+    nuevo_estado = serializers.ChoiceField(choices=Pedidos.estado_choices)
+    motivo = serializers.CharField(max_length=500)
+
+    def validate_pedido_id(self, value):
+        try:
+            Pedidos.objects.get(id=value)
+        except Pedidos.DoesNotExist:
+            raise serializers.ValidationError("El pedido no existe.")
         return value
 
 class IdHistorialSerializer(serializers.Serializer):

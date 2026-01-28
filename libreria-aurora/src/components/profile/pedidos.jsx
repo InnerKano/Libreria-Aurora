@@ -97,11 +97,17 @@ function Pedidos() {
         return;
       }
 
-      toast.success("Devolución procesada exitosamente.Revisa tu correo para más detalles.", {
+      const responseData = await response.json();
+      toast.success("Devolución solicitada. Revisa tu correo o continúa el proceso en pantalla.", {
         duration: 5000,
         position: "top-right",
       });
-      fetchHistorialCompras(); // Actualiza el historial
+      fetchHistorialCompras();
+      fetchHistorialPedidos();
+
+      if (responseData?.token) {
+        navigate(`/devolucion/${responseData.token}`);
+      }
     } catch (error) {
       console.error("Error al procesar la devolución:", error);
     }
@@ -186,11 +192,11 @@ function Pedidos() {
         </div>
 
           {modoVista === "pedidos" ? (
-            pedidos.filter((pedido) => pedido.estado !== "Entregado").length === 0 ? (
+            pedidos.filter((pedido) => !["Entregado", "En Devolución", "Devuelto", "Cancelado"].includes(pedido.estado)).length === 0 ? (
               <p className="text-gray-500">No hay pedidos registrados.</p>
             ) : (
               pedidos
-                .filter((pedido) => pedido.estado !== "Entregado")
+                .filter((pedido) => !["Entregado", "En Devolución", "Devuelto", "Cancelado"].includes(pedido.estado))
                 .map((pedido) => renderPedido(pedido, true))
             )
           ) : (

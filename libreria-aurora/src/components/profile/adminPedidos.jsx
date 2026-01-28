@@ -4,6 +4,7 @@ import { getApiUrl } from "../../api/config";
 import LoadingSpinner from "../ui/LoadingSpinner";
 
 const ESTADOS = ["Pendiente", "En Proceso", "Entregado", "Cancelado"];
+const OVERRIDE_ESTADOS = ["Pendiente", "En Proceso", "Entregado", "Cancelado", "En Devolución", "Devuelto"];
 
 const formatDate = (dateString) => {
   const options = {
@@ -39,9 +40,12 @@ function AdminPedidos() {
   const [selectedPedido, setSelectedPedido] = useState(null);
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [overrideEstado, setOverrideEstado] = useState("");
+  const [overrideMotivo, setOverrideMotivo] = useState("");
 
   const pedidosUrl = getApiUrl("/api/compras/pedidos/admin_list/");
   const cambiarEstadoUrl = getApiUrl("/api/compras/pedidos/admin_cambiar_estado/");
+  const overrideEstadoUrl = getApiUrl("/api/compras/pedidos/admin_override_estado/");
   const historialUrl = getApiUrl("/api/compras/historial-compras/admin_list/");
 
   const fetchPedidos = async () => {
@@ -98,6 +102,13 @@ function AdminPedidos() {
     fetchPedidos();
   }, []);
 
+  useEffect(() => {
+    if (selectedPedido) {
+      setOverrideEstado(selectedPedido.estado || "");
+      setOverrideMotivo("");
+    }
+  }, [selectedPedido]);
+
   const handleTabChange = async (tab) => {
     setActiveTab(tab);
     setSelectedPedido(null);
@@ -143,13 +154,59 @@ function AdminPedidos() {
     }
   };
 
+  const handleOverride = async () => {
+    if (!selectedPedido) return;
+    if (!overrideMotivo.trim()) {
+      toast.error("Debes indicar un motivo para el override.");
+      return;
+    }
+
+    try {
+      setLoadingAction(true);
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(overrideEstadoUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          pedido_id: selectedPedido.id,
+          nuevo_estado: overrideEstado,
+          motivo: overrideMotivo,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const message = errorData?.mensaje || errorData?.error || "No se pudo aplicar el override";
+        throw new Error(message);
+      }
+
+      toast.success("Override aplicado");
+      await fetchPedidos();
+      if (activeTab === "historial") {
+        await fetchHistorial();
+      }
+      setSelectedPedido((prev) => (prev ? { ...prev, estado: overrideEstado } : prev));
+    } catch (error) {
+      console.error("Error en override:", error);
+      toast.error(error.message || "No se pudo aplicar el override");
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
   const filteredPedidos = useMemo(() => {
     let data = pedidos;
 
     if (filterStatus !== "ALL") {
       data = data.filter((pedido) => pedido.estado === filterStatus);
     } else {
-      data = data.filter((pedido) => pedido.estado !== "Entregado" && pedido.estado !== "Cancelado");
+      data = data.filter(
+        (pedido) => !["Entregado", "Cancelado", "Devuelto", "En Devolución"].includes(pedido.estado)
+      );
     }
 
     if (searchQuery.trim()) {
@@ -249,6 +306,40 @@ function AdminPedidos() {
             <p className="text-lg font-semibold text-gray-900">Total libros: {cantidadTotal}</p>
             <p className="text-lg font-semibold text-green-600">Total pedido: ${precioTotal.toFixed(2)}</p>
           </div>
+
+          <div className="mt-6 border-t pt-6">
+            <h3 className="text-sm font-semibold text-gray-700 mb-2">Override de emergencia</h3>
+            <p className="text-xs text-gray-500 mb-3">
+              Usa esta acción solo si hay un error operativo. Requiere motivo y queda auditado.
+            </p>
+            <div className="flex flex-col md:flex-row gap-3">
+              <select
+                value={overrideEstado}
+                onChange={(e) => setOverrideEstado(e.target.value)}
+                className="border rounded px-3 py-2 text-sm"
+              >
+                {OVERRIDE_ESTADOS.map((estado) => (
+                  <option key={estado} value={estado}>
+                    {estado}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                placeholder="Motivo del cambio"
+                value={overrideMotivo}
+                onChange={(e) => setOverrideMotivo(e.target.value)}
+                className="flex-1 border rounded px-3 py-2 text-sm"
+              />
+              <button
+                onClick={handleOverride}
+                disabled={loadingAction}
+                className="bg-red-600 text-white px-4 py-2 rounded text-sm"
+              >
+                Aplicar override
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -278,6 +369,12 @@ function AdminPedidos() {
           </button>
         </div>
       </div>
+
+      {activeTab === "pedidos" && (
+        <div className="mb-6 rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+          El override de emergencia está disponible al abrir el detalle del pedido.
+        </div>
+      )}
 
       {activeTab === "pedidos" && (
         <div className="mb-6 bg-white rounded-lg shadow-md p-4">
@@ -333,6 +430,7 @@ function AdminPedidos() {
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Libros</th>
                         <th className="px-4 py-3"></th>
+                        <th className="px-4 py-3"></th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -352,6 +450,14 @@ function AdminPedidos() {
                                 className="text-blue-600 hover:underline"
                               >
                                 Ver detalle
+                              </button>
+                            </td>
+                            <td className="px-4 py-4 text-sm">
+                              <button
+                                onClick={() => setSelectedPedido(pedido)}
+                                className="text-red-600 hover:underline"
+                              >
+                                Override
                               </button>
                             </td>
                           </tr>
@@ -382,6 +488,16 @@ function AdminPedidos() {
                     <p className="text-sm text-gray-500">Usuario: {user.username || "Usuario"}</p>
                   </div>
                   <div className="text-sm text-gray-600">Estado: {pedido.estado}</div>
+                </div>
+                <div className="mt-4 space-y-2">
+                  {pedido.pedidolibro_set.map((item) => (
+                    <div key={`${pedido.id}-${item.libro.id}`} className="flex justify-between text-sm text-gray-700">
+                      <span>
+                        {item.libro.titulo} • {item.cantidad} uds
+                      </span>
+                      <span>${parseFloat(item.libro.precio).toFixed(2)}</span>
+                    </div>
+                  ))}
                 </div>
                 <div className="mt-4">
                   <p className="text-sm text-gray-600">Libros: {cantidadTotal}</p>

@@ -10,6 +10,7 @@ import Catalogo from './components/catalogo';
 import DetalleLibro from './components/DetalleLibro';
 import Carrito from './components/carrito';
 import Tiendas from './components/Tiendas';
+import DevolucionSolicitud from './components/devolucion/DevolucionSolicitud';
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
         <Route path='/:libro' element={<DetalleLibro/>} />
         <Route path= "/carrito" element={<Carrito/>} />
         <Route path="/tiendas" element={<Tiendas/>} />
+        <Route path="/devolucion/:token" element={<DevolucionSolicitud />} />
       </Routes>
     </HashRouter>
   );

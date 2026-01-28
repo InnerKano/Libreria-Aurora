@@ -2860,3 +2860,74 @@ Se añadieron pruebas para:
 - Cambio de estado y creación de historial.
 
 Esta implementación es modular y coherente con los paneles administrativos existentes (libros/usuarios/foro), y queda preparada para extender estados, filtros adicionales o integración con logística en el futuro.
+
+Actualización de mantenimiento: coherencia de historial, devoluciones y override de emergencia
+
+Objetivo  
+Corregir inconsistencias en el flujo de pedidos y devoluciones, asegurar que el historial solo refleje estados finales, mejorar la UX de devoluciones y habilitar un mecanismo de override auditado para casos excepcionales.
+
+Resumen de cambios (qué y por qué)
+1) Historial solo para estados finales  
+- Qué: El historial de compras se filtra para mostrar únicamente pedidos en estados finales.  
+- Por qué: Evita duplicidades y estados intermedios que aún no concluyen el proceso.  
+- Estados finales considerados: `Entregado`, `Devuelto`, `Cancelado`.  
+- Dónde: views.py (filtros en `HistorialDeComprasViewSet`).
+
+2) Override de emergencia con auditoría  
+- Qué: Se creó un endpoint de override para staff, con motivo obligatorio y registro persistente.  
+- Por qué: Permite corregir errores operativos sin romper la trazabilidad.  
+- Dónde:
+  - Modelo de auditoría `PedidoEstadoOverride` en models.py.  
+  - Migración en 0007_pedidoestadooverride.py.  
+  - Endpoint `admin_override_estado` en views.py.  
+  - Serializador `PedidoOverrideSerializer` en serializers.py.  
+
+3) UX de override en panel de staff  
+- Qué: Botón “Override” por pedido + sección visible en el detalle con motivo obligatorio.  
+- Por qué: Hacer visible la ruta de emergencia y evitar confusión con los flujos regulares.  
+- Dónde: adminPedidos.jsx.
+
+4) Mensaje de guía en panel de devoluciones  
+- Qué: Aviso de que el override se gestiona en el detalle del pedido.  
+- Por qué: Evitar expectativa de override en el panel de devoluciones.  
+- Dónde: adminDevoluciones.jsx.
+
+5) Coherencia en flujo de devolución (UX)  
+- Qué: Se eliminó el checkbox confuso; ahora se usa cantidad (0 = no devolver) y se bloquea si el estado no es `Solicitada`.  
+- Por qué: Claridad y evitar reenvíos inválidos del mismo enlace.  
+- Dónde: DevolucionSolicitud.jsx.
+
+6) Cancelación con reembolso y stock  
+- Qué: Al cancelar se devuelve saldo, se repone stock y se registra en historial.  
+- Por qué: Coherencia contable y trazabilidad.  
+- Dónde: models.py (`_aplicar_cancelacion()`), con auditoría de saldo vía `HistorialSaldo`.
+
+Archivos modificados
+Backend  
+- models.py  
+  - Añadido `PedidoEstadoOverride`.  
+  - Lógica de cancelación con reembolso y registro.  
+- serializers.py  
+  - `PedidoOverrideSerializer`.  
+- views.py  
+  - Filtro de historial a estados finales.  
+  - Endpoint `admin_override_estado`.  
+- 0007_pedidoestadooverride.py
+
+Frontend  
+- adminPedidos.jsx  
+  - UI de override y acceso directo.  
+- adminDevoluciones.jsx  
+  - Aviso de override.  
+- DevolucionSolicitud.jsx  
+  - UX de devolución con cantidades y bloqueo si no es `Solicitada`.
+
+Notas de mantenimiento
+- `admin_override_estado` requiere `motivo`; guarda auditoría con `PedidoEstadoOverride`.  
+- En estados intermedios (`Pendiente`, `En Proceso`, `En Devolución`) el pedido no aparece en historial.  
+- Para cambios excepcionales desde estados finales, usar el override (no los flujos regulares).  
+- La UI del override solo aparece al abrir el detalle del pedido.
+
+Pruebas
+- Se ejecutaron migraciones y tests de compras: 10 OK.  
+- Ajuste de test para evitar duplicar `Saldo` en tests.py.

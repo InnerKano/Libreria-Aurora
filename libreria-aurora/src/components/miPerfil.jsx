@@ -12,11 +12,12 @@ import AdminLibros from "./profile/adminLibros";
 import AdminUsers from "./profile/adminUsers";
 import GestionarTiendas from "./profile/gestionarTiendas";
 import AdminPedidos from "./profile/adminPedidos";
+import AdminDevoluciones from "./profile/adminDevoluciones";
 
 function MiPerfil() {
   const { isStaff, loading } = useIsStaff();
   const options = ['editar perfil', 'cambiar contraseña', 'gestion financiera','reservas', 'pedidos', 'foro'];
-  const staffOptions = ['editar perfil', 'cambiar contraseña', 'administrar pedidos', 'foro', 'gestionar libros', 'gestionar tiendas'];
+  const staffOptions = ['editar perfil', 'cambiar contraseña', 'administrar pedidos', 'gestionar devoluciones', 'foro', 'gestionar libros', 'gestionar tiendas'];
   const staffOptionsWithUsers = [...staffOptions.slice(0,5), 'gestionar usuarios', ...staffOptions.slice(5)];
   const [selectedOption, setSelectedOption] = useState('editar perfil');
 
@@ -34,6 +35,8 @@ function MiPerfil() {
         return !isStaff && <Reservas/>;
       case 'administrar pedidos':
         return isStaff && <AdminPedidos />;
+      case 'gestionar devoluciones':
+        return isStaff && <AdminDevoluciones />;
       case 'foro':
         return isStaff ? <AdminForumMessages/> : <ForumMessages/>;
       case 'gestionar libros':

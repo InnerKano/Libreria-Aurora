@@ -4,10 +4,15 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
-from .models import Carrito, HistorialDeCompras, Pedidos, Reserva
+from django.utils import timezone
+from .models import Carrito, HistorialDeCompras, Pedidos, Reserva, Devolucion, DevolucionItem, PedidoEstadoOverride
 from .serializers import AgregaroQuitarLibroSerializer, CarritoLibroSerializer, HistorialDeComprasSerializer, PedidoLibroSerializer, PedidosSerializer
 from .serializers import ReservaSerializer, CrearReservaSerializer, IdReservaSerializer, CancelarPedidoSerializer, CambiarEstadoPedidoSerializer, IdHistorialSerializer
 from .serializers import AdminPedidosSerializer, AdminHistorialDeComprasSerializer
+from .serializers import DevolucionSerializer, DevolucionConfirmarSerializer, DevolucionActualizarEstadoSerializer, DevolucionAdminSerializer
+from .serializers import PedidoOverrideSerializer
+
+FINAL_PEDIDO_ESTADOS = ['Entregado', 'Devuelto', 'Cancelado']
 
 @extend_schema_view(
     list=extend_schema(description="Obtiene la lista de todos los carritos"),
@@ -202,6 +207,12 @@ class PedidoViewSet(viewsets.ModelViewSet):
         pedido_id = serializer.validated_data['pedido_id']
         nuevo_estado = serializer.validated_data['nuevo_estado']
 
+        if nuevo_estado in ['En Devolución', 'Devuelto']:
+            return Response(
+                {"error": "El estado de devolución se gestiona desde el panel de devoluciones."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
             pedido = Pedidos.objects.get(id=pedido_id)
             resultado = pedido.cambiar_estado(nuevo_estado)
@@ -210,6 +221,49 @@ class PedidoViewSet(viewsets.ModelViewSet):
             return Response(resultado, status=status.HTTP_400_BAD_REQUEST)
         except Pedidos.DoesNotExist:
             return Response({"error": "Pedido no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+
+    @extend_schema(
+        description="(Staff) Override de estado con motivo (emergencia)",
+        request=PedidoOverrideSerializer,
+        responses={200: "Estado del pedido actualizado con override", 400: None}
+    )
+    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def admin_override_estado(self, request):
+        serializer = PedidoOverrideSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        pedido_id = serializer.validated_data['pedido_id']
+        nuevo_estado = serializer.validated_data['nuevo_estado']
+        motivo = serializer.validated_data['motivo']
+
+        pedido = get_object_or_404(Pedidos, id=pedido_id)
+        estado_anterior = pedido.estado
+
+        if estado_anterior == nuevo_estado:
+            return Response({"error": "El pedido ya tiene ese estado."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if nuevo_estado == 'Cancelado':
+            resultado = pedido._aplicar_cancelacion()
+            if resultado['estado'] != 'exito':
+                return Response(resultado, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            pedido.estado = nuevo_estado
+            pedido.save()
+
+            if nuevo_estado in FINAL_PEDIDO_ESTADOS:
+                HistorialDeCompras.objects.get_or_create(usuario=pedido.usuario, pedido=pedido)
+            else:
+                HistorialDeCompras.objects.filter(pedido=pedido).delete()
+
+        PedidoEstadoOverride.objects.create(
+            pedido=pedido,
+            staff=request.user,
+            estado_anterior=estado_anterior,
+            estado_nuevo=nuevo_estado,
+            motivo=motivo,
+        )
+
+        return Response({"mensaje": "Estado del pedido actualizado con override"}, status=status.HTTP_200_OK)
     
 class ReservaViewSet(viewsets.ModelViewSet):
     queryset = Reserva.objects.all()
@@ -299,7 +353,10 @@ class HistorialDeComprasViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         # Solo muestra el historial del usuario autenticado
-        return HistorialDeCompras.objects.filter(usuario=self.request.user).select_related('pedido').order_by('-fecha')
+        return HistorialDeCompras.objects.filter(
+            usuario=self.request.user,
+            pedido__estado__in=FINAL_PEDIDO_ESTADOS,
+        ).select_related('pedido').order_by('-fecha')
     
     @extend_schema(
         description="Obtiene el historial de compras del usuario autenticado",
@@ -315,7 +372,9 @@ class HistorialDeComprasViewSet(viewsets.ReadOnlyModelViewSet):
     )
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAdminUser])
     def admin_list(self, request):
-        queryset = HistorialDeCompras.objects.select_related('usuario', 'pedido').prefetch_related('pedido__pedidolibro_set__libro').order_by('-fecha')
+        queryset = HistorialDeCompras.objects.filter(
+            pedido__estado__in=FINAL_PEDIDO_ESTADOS,
+        ).select_related('usuario', 'pedido').prefetch_related('pedido__pedidolibro_set__libro').order_by('-fecha')
         return Response(AdminHistorialDeComprasSerializer(queryset, many=True).data)
     
     @extend_schema(
@@ -333,7 +392,132 @@ class HistorialDeComprasViewSet(viewsets.ReadOnlyModelViewSet):
             historial = HistorialDeCompras.objects.get(id=historial_id, usuario=request.user)
             resultado = historial.devolucion_compra()
             if resultado['estado'] == 'exito':
-                return Response({"mensaje": "Se ha enviado un correo electronico con un codigo qr"}, status=status.HTTP_200_OK)
+                return Response({
+                    "mensaje": "Se ha enviado un correo electronico con el enlace de devolución",
+                    "return_url": resultado.get("return_url"),
+                    "token": resultado.get("token")
+                }, status=status.HTTP_200_OK)
             return Response(resultado, status=status.HTTP_400_BAD_REQUEST)
         except HistorialDeCompras.DoesNotExist:
             return Response({"error": "Compra no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+
+
+class DevolucionViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Devolucion.objects.all().select_related('pedido', 'usuario').prefetch_related('items__libro')
+    serializer_class = DevolucionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        if self.request.user.is_staff:
+            return self.queryset
+        return self.queryset.filter(usuario=self.request.user)
+
+    @extend_schema(
+        description="(Publico) Obtiene el detalle de devolución por token",
+        responses={200: DevolucionSerializer}
+    )
+    @action(detail=False, methods=['get'], url_path=r'resolve/(?P<token>[0-9a-f-]+)', permission_classes=[permissions.AllowAny])
+    def resolve(self, request, token=None):
+        devolucion = get_object_or_404(Devolucion, token=token)
+        serializer = DevolucionSerializer(devolucion)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        description="Confirma los ítems de devolución usando token",
+        request=DevolucionConfirmarSerializer,
+        responses={200: "Devolución confirmada", 400: None}
+    )
+    @action(detail=False, methods=['post'], url_path=r'confirmar/(?P<token>[0-9a-f-]+)', permission_classes=[permissions.IsAuthenticated])
+    def confirmar(self, request, token=None):
+        devolucion = get_object_or_404(Devolucion, token=token, usuario=request.user)
+        if devolucion.estado != 'Solicitada':
+            return Response(
+                {"error": "La devolución no puede confirmarse en su estado actual."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = DevolucionConfirmarSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        items_data = serializer.validated_data.get('items', [])
+        for item in items_data:
+            libro_id = item.get('libro_id')
+            cantidad = item.get('cantidad', 1)
+            if not libro_id:
+                continue
+            devolucion_item, _ = DevolucionItem.objects.get_or_create(
+                devolucion=devolucion,
+                libro_id=libro_id,
+                defaults={'cantidad': cantidad}
+            )
+            devolucion_item.cantidad = cantidad
+            devolucion_item.save()
+
+        devolucion.estado = 'En Proceso'
+        devolucion.save()
+
+        pedido = devolucion.pedido
+        if pedido.estado != 'En Devolución':
+            pedido.estado = 'En Devolución'
+            pedido.save()
+
+        return Response({"mensaje": "Devolución confirmada"}, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        description="(Staff) Lista devoluciones globales",
+        responses={200: DevolucionAdminSerializer(many=True)}
+    )
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAdminUser])
+    def admin_list(self, request):
+        serializer = DevolucionAdminSerializer(self.queryset.order_by('-fecha_solicitud'), many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        description="(Staff) Actualiza estado de una devolución",
+        request=DevolucionActualizarEstadoSerializer,
+        responses={200: "Estado actualizado", 400: None}
+    )
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def admin_update_estado(self, request, pk=None):
+        devolucion = self.get_object()
+        serializer = DevolucionActualizarEstadoSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        nuevo_estado = serializer.validated_data['estado']
+        if nuevo_estado == devolucion.estado:
+            return Response(
+                {"error": "La devolución ya tiene ese estado."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        allowed_transitions = {
+            'Solicitada': {'En Proceso'},
+            'En Proceso': {'Devuelta', 'Rechazada'},
+            'Devuelta': set(),
+            'Rechazada': set(),
+        }
+
+        if nuevo_estado not in allowed_transitions.get(devolucion.estado, set()):
+            return Response(
+                {"error": "Transición de estado no permitida."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        devolucion.estado = nuevo_estado
+        if nuevo_estado in ['Devuelta', 'Rechazada']:
+            devolucion.fecha_resolucion = timezone.now()
+        devolucion.save()
+
+        pedido = devolucion.pedido
+        if nuevo_estado == 'Devuelta':
+            pedido.estado = 'Devuelto'
+            pedido.save()
+            HistorialDeCompras.objects.get_or_create(usuario=pedido.usuario, pedido=pedido)
+        elif nuevo_estado == 'Rechazada':
+            pedido.estado = 'Entregado'
+            pedido.save()
+            HistorialDeCompras.objects.get_or_create(usuario=pedido.usuario, pedido=pedido)
+        elif nuevo_estado == 'En Proceso':
+            pedido.estado = 'En Devolución'
+            pedido.save()
+
+        return Response({"mensaje": "Estado actualizado"}, status=status.HTTP_200_OK)

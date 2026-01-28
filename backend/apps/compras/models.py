@@ -1,4 +1,6 @@
 from django.db import models
+from django.conf import settings
+import uuid
 from apps.libros.models import Libro
 from apps.usuarios.models import Usuario
 from apps.finanzas.models import Saldo
@@ -72,7 +74,7 @@ class Carrito(models.Model):
         total = sum(item.libro.precio * item.cantidad for item in items)
         total_libros = sum(item.cantidad for item in items)
 
-        saldo = Saldo.objects.get(usuario=self.usuario)
+        saldo, _ = Saldo.objects.get_or_create(usuario=self.usuario, defaults={"saldo": Decimal('0')})
         if saldo.mostrar_saldo() < total:
             return {
                 "estado": "error",
@@ -262,18 +264,46 @@ class HistorialDeCompras(models.Model):
                 "mensaje": "La compra no puede ser devuelta, ya que han pasado más de 8 días desde la fecha de compra."
             }
 
-        qr_data = f"Devolución de compra #{self.id} - Usuario: {self.usuario.username}"
+        if self.pedido.estado not in ['Entregado', 'En Devolución']:
+            return {
+                "estado": "error",
+                "mensaje": "El pedido no está disponible para devolución."
+            }
+
+        devolucion, created = Devolucion.objects.get_or_create(
+            pedido=self.pedido,
+            defaults={
+                'usuario': self.usuario,
+                'estado': 'Solicitada'
+            }
+        )
+
+        if created:
+            for item in PedidoLibro.objects.filter(pedido=self.pedido).select_related('libro'):
+                DevolucionItem.objects.create(
+                    devolucion=devolucion,
+                    libro=item.libro,
+                    cantidad=item.cantidad
+                )
+
+            self.pedido.estado = 'En Devolución'
+            self.pedido.save()
+
+        return_url = f"{settings.FRONTEND_BASE_URL}/#/devolucion/{devolucion.token}"
+
+        qr_data = return_url
         qr = qrcode.make(qr_data)
         img_io = BytesIO()
         qr.save(img_io, format='PNG')
         img_io.seek(0)
 
         # Envía el correo con el QR adjunto (sin guardarlo en el modelo)
-        subject = f"Código QR para devolución de compra #{self.id}"
+        subject = f"Enlace de devolución para compra #{self.id}"
         message = (
             f"Hola {self.usuario.username},\n\n"
-            f"Adjuntamos el código QR para la devolución de tu compra #{self.id}.\n"
+            f"Adjuntamos el código QR y el enlace para la devolución de tu compra #{self.id}.\n"
             "Recuerda que solo puedes devolver la compra dentro de los 8 días posteriores a la compra.\n\n"
+            f"Enlace directo: {return_url}\n\n"
             "Saludos,\nLibrería Aurora"
         )
         email = EmailMessage(
@@ -286,7 +316,9 @@ class HistorialDeCompras(models.Model):
 
         return {
             "estado": "exito",
-            "mensaje": f"Código QR generado y enviado por email para la devolución de la compra #{self.id}."
+            "mensaje": f"Enlace de devolución generado y enviado para la compra #{self.id}.",
+            "return_url": return_url,
+            "token": str(devolucion.token)
         }
         
     def MostrarHistorialCompras(self):
@@ -304,8 +336,10 @@ class Pedidos(models.Model):
         ('Cancelado', 'Cancelado'),
         ('En Proceso', 'En Proceso'),
         ('Entregado', 'Entregado'),
+        ('En Devolución', 'En Devolución'),
+        ('Devuelto', 'Devuelto'),
     ]
-    estado = models.CharField(max_length=10, choices=estado_choices, default='Pendiente')
+    estado = models.CharField(max_length=20, choices=estado_choices, default='Pendiente')
     def save(self, *args, **kwargs):
         if not self.pk and not self.fecha:  
             self.fecha = timezone.now()
@@ -334,28 +368,36 @@ class Pedidos(models.Model):
         """
         Cancela un pedido.
         """
-        if self.estado == 'Pendiente':
-            self.estado = 'Cancelado'
-            self.save()
-            return {
-                "estado": "exito",
-                "mensaje": f"Pedido #{self.id} cancelado."
-            }
-        else:
+        if self.estado != 'Pendiente':
             return {
                 "estado": "error",
                 "mensaje": "El pedido ya ha sido completado o cancelado."
             }
+
+        resultado = self._aplicar_cancelacion()
+        if resultado["estado"] == "exito":
+            return {
+                "estado": "exito",
+                "mensaje": f"Pedido #{self.id} cancelado."
+            }
+        return resultado
     
     def cambiar_estado(self, nuevo_estado):
         """
         Cambia el estado del pedido.
         """
         if nuevo_estado in dict(self.estado_choices):
+            if nuevo_estado == 'Cancelado':
+                if self.estado == 'Cancelado':
+                    return {
+                        "estado": "error",
+                        "mensaje": "El pedido ya está cancelado."
+                    }
+                return self._aplicar_cancelacion()
             self.estado = nuevo_estado
             if nuevo_estado == 'Entregado':
                 # Si el pedido es entregado, se registra en el historial de compras
-                HistorialDeCompras.objects.create(usuario=self.usuario, pedido=self)
+                HistorialDeCompras.objects.get_or_create(usuario=self.usuario, pedido=self)
             self.save()
             
             return {
@@ -367,3 +409,85 @@ class Pedidos(models.Model):
                 "estado": "error",
                 "mensaje": "Estado no válido."
             }
+
+    def _aplicar_cancelacion(self):
+        """
+        Aplica la cancelación: devuelve saldo, repone stock y registra historial.
+        """
+        from decimal import Decimal
+        from apps.finanzas.models import HistorialSaldo
+        items = PedidoLibro.objects.filter(pedido=self).select_related('libro')
+        if not items.exists():
+            return {
+                "estado": "error",
+                "mensaje": "No hay libros asociados al pedido."
+            }
+
+        total = Decimal('0')
+        for item in items:
+            total += item.libro.precio * item.cantidad
+            item.libro.stock += item.cantidad
+            item.libro.save()
+
+        saldo = Saldo.objects.get(usuario=self.usuario)
+        saldo.saldo += total
+        saldo.save()
+        HistorialSaldo.objects.create(
+            usuario=self.usuario,
+            tipo_transaccion='AJUSTE',
+            monto=total,
+            saldo_resultante=saldo.saldo,
+            descripcion=f"Reembolso por cancelación del pedido #{self.id}",
+        )
+
+        self.estado = 'Cancelado'
+        self.save()
+
+        HistorialDeCompras.objects.get_or_create(usuario=self.usuario, pedido=self)
+
+        return {
+            "estado": "exito",
+            "mensaje": f"Pedido #{self.id} cancelado y reembolsado.",
+            "total_reembolsado": str(total)
+        }
+
+
+class Devolucion(models.Model):
+    estado_choices = [
+        ('Solicitada', 'Solicitada'),
+        ('En Proceso', 'En Proceso'),
+        ('Devuelta', 'Devuelta'),
+        ('Rechazada', 'Rechazada'),
+    ]
+
+    pedido = models.OneToOneField(Pedidos, on_delete=models.CASCADE, related_name='devolucion')
+    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='devoluciones')
+    token = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    estado = models.CharField(max_length=20, choices=estado_choices, default='Solicitada')
+    fecha_solicitud = models.DateTimeField(auto_now_add=True)
+    fecha_resolucion = models.DateTimeField(null=True, blank=True)
+    motivo = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"Devolución #{self.id} - Pedido #{self.pedido.id}"
+
+
+class DevolucionItem(models.Model):
+    devolucion = models.ForeignKey(Devolucion, on_delete=models.CASCADE, related_name='items')
+    libro = models.ForeignKey(Libro, on_delete=models.CASCADE)
+    cantidad = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        unique_together = ('devolucion', 'libro')
+
+
+class PedidoEstadoOverride(models.Model):
+    pedido = models.ForeignKey(Pedidos, on_delete=models.CASCADE, related_name='overrides')
+    staff = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='pedido_overrides')
+    estado_anterior = models.CharField(max_length=20)
+    estado_nuevo = models.CharField(max_length=20)
+    motivo = models.TextField()
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Override pedido #{self.pedido.id} ({self.estado_anterior} -> {self.estado_nuevo})"
