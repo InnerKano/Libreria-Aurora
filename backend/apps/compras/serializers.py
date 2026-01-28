@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from .models import Carrito, HistorialDeCompras, Pedidos, CarritoLibro, PedidoLibro, Reserva
 from apps.libros.serializers import LibroSerializer as LibroPublicSerializer
+from apps.usuarios.serializers import UsuarioSerializer
 
 class CarritoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -14,13 +15,6 @@ class AgregaroQuitarLibroSerializer(serializers.Serializer):
     cantidad = serializers.IntegerField(required=False, default=1)
     
 
-class PedidosSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Pedidos
-        fields = '__all__'
-        read_only_fields = ('fecha',)  # Debe ser una tupla con coma al final si solo hay un elemento
-        
-    
 class PedidoLibroSerializer(serializers.ModelSerializer):
     libro = LibroPublicSerializer(read_only=True)  # Muestra el objeto libro completo
 
@@ -30,6 +24,22 @@ class PedidoLibroSerializer(serializers.ModelSerializer):
 
 class PedidosSerializer(serializers.ModelSerializer):
     pedidolibro_set = PedidoLibroSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Pedidos
+        fields = ['id', 'fecha', 'usuario', 'estado', 'pedidolibro_set']
+        read_only_fields = ('fecha',)
+
+
+class UsuarioResumenSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UsuarioSerializer.Meta.model
+        fields = ['id', 'username', 'email', 'first_name', 'last_name']
+
+
+class AdminPedidosSerializer(serializers.ModelSerializer):
+    pedidolibro_set = PedidoLibroSerializer(many=True, read_only=True)
+    usuario = UsuarioResumenSerializer(read_only=True)
 
     class Meta:
         model = Pedidos
@@ -79,6 +89,16 @@ class IdReservaSerializer(serializers.Serializer):
     
 class HistorialDeComprasSerializer(serializers.ModelSerializer):
     pedido = PedidosSerializer(read_only=True)
+
+    class Meta:
+        model = HistorialDeCompras
+        fields = ['id', 'usuario', 'pedido', 'fecha']
+        read_only_fields = ['id', 'usuario', 'pedido', 'fecha']
+
+
+class AdminHistorialDeComprasSerializer(serializers.ModelSerializer):
+    pedido = AdminPedidosSerializer(read_only=True)
+    usuario = UsuarioResumenSerializer(read_only=True)
 
     class Meta:
         model = HistorialDeCompras

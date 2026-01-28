@@ -2785,3 +2785,78 @@ Unificar la forma “correcta” de consumir portadas en todo el proyecto:
 
 - **Resumen de valor**  
   - Pasa de un toggle mínimo a una consola de edición completa, reutilizando el patrón de administración ya usado en libros, con mínima fricción y máxima cobertura de campos clave de usuario.
+
+  Documentación — Administración de pedidos (staff)
+
+Resumen
+Se implementó un módulo de administración de pedidos para usuarios staff que permite listar pedidos activos, ver detalle por pedido, cambiar estados y revisar el historial definitivo. Se diseñó para dar seguimiento operativo y mantener trazabilidad sin alterar el flujo de compras de usuarios finales.
+
+Objetivo (para qué)
+- Permitir a staff gestionar el ciclo de vida de pedidos (seguimiento y actualización de estado).
+- Centralizar la vista operativa de pedidos activos agrupados por fecha.
+- Proveer historial de pedidos finalizados (entregados) para consulta.
+
+Motivación (por qué)
+El módulo de pedidos de usuario final está orientado al cliente; el staff requiere un panel administrativo con acceso a todos los pedidos, capacidad de actualización de estados y una vista consolidada por fecha/usuario para logística y seguimiento.
+
+Cómo funciona (flujo técnico)
+1) Listado global de pedidos (staff):
+   - Endpoint admin que devuelve todos los pedidos con usuario y libros asociados.
+   - El frontend agrupa por fecha (día) y permite filtrar por estado y búsqueda por usuario o ID.
+
+2) Cambio de estado (staff):
+   - Endpoint admin acepta `pedido_id` y `nuevo_estado`.
+   - Si el estado pasa a `Entregado`, se crea automáticamente una entrada en el historial de compras (regla existente en el modelo).
+
+3) Historial (staff):
+   - Endpoint admin devuelve historial global (pedidos con estado definitivo).
+   - El frontend muestra tarjetas por pedido con total y datos del usuario.
+
+Estados soportados (actuales)
+- Pendiente
+- En Proceso
+- Entregado
+- Cancelado
+
+Si se requieren estados nuevos (por ejemplo `Enviado` o `Devuelto`), se deben actualizar los choices en el modelo y propagar cambios a serializer, tests y UI.
+
+Dónde vive (archivos relevantes)
+Frontend:
+- Panel admin de pedidos: adminPedidos.jsx
+- Menu y routing de perfil: miPerfil.jsx
+
+Backend:
+- Endpoints admin de pedidos e historial: views.py
+- Serializadores admin (incluye usuario resumido): serializers.py
+- Modelo `Pedidos` y regla de historial al entregar: models.py
+- Tests de endpoints admin: tests.py
+
+Endpoints añadidos (staff)
+- GET /api/compras/pedidos/admin_list/
+  - Lista todos los pedidos con `usuario` y `pedidolibro_set`.
+- POST /api/compras/pedidos/admin_cambiar_estado/
+  - Body: `{ pedido_id, nuevo_estado }`
+  - Actualiza estado y, si pasa a `Entregado`, crea historial.
+- GET /api/compras/historial-compras/admin_list/
+  - Lista historial global (pedidos finalizados).
+
+Permisos
+- Endpoints admin usan `permissions.IsAdminUser` (requiere `is_staff=True`).
+- Los endpoints de usuario final permanecen intactos.
+
+Consideraciones de mantenimiento
+- Si se extienden estados, actualizar:
+  - `Pedidos.estado_choices` en models.py
+  - Validación de `CambiarEstadoPedidoSerializer` en serializers.py
+  - Lista `ESTADOS` en adminPedidos.jsx
+  - Tests en tests.py
+- La creación de historial sigue la regla: solo cuando `estado` pasa a `Entregado`.
+- El panel de staff oculta la vista de pedidos del usuario final para evitar confusión y duplicidad.
+
+Cobertura de pruebas
+Se añadieron pruebas para:
+- Acceso restringido a staff.
+- Listado global con usuario y libros.
+- Cambio de estado y creación de historial.
+
+Esta implementación es modular y coherente con los paneles administrativos existentes (libros/usuarios/foro), y queda preparada para extender estados, filtros adicionales o integración con logística en el futuro.

@@ -7,6 +7,7 @@ from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiPara
 from .models import Carrito, HistorialDeCompras, Pedidos, Reserva
 from .serializers import AgregaroQuitarLibroSerializer, CarritoLibroSerializer, HistorialDeComprasSerializer, PedidoLibroSerializer, PedidosSerializer
 from .serializers import ReservaSerializer, CrearReservaSerializer, IdReservaSerializer, CancelarPedidoSerializer, CambiarEstadoPedidoSerializer, IdHistorialSerializer
+from .serializers import AdminPedidosSerializer, AdminHistorialDeComprasSerializer
 
 @extend_schema_view(
     list=extend_schema(description="Obtiene la lista de todos los carritos"),
@@ -125,6 +126,16 @@ class PedidoViewSet(viewsets.ModelViewSet):
         serializer = PedidosSerializer(pedidos, many=True)
         PedidoLibroSerializer(pedidos, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        description="(Staff) Obtiene todos los pedidos del sistema",
+        responses={200: AdminPedidosSerializer(many=True)},
+    )
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAdminUser])
+    def admin_list(self, request):
+        pedidos = Pedidos.objects.select_related('usuario').prefetch_related('pedidolibro_set__libro').order_by('-fecha')
+        serializer = AdminPedidosSerializer(pedidos, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
     
     @extend_schema(
         description = "Cancela un pedido",
@@ -171,6 +182,28 @@ class PedidoViewSet(viewsets.ModelViewSet):
         
         try:
             pedido = Pedidos.objects.get(id=pedido_id, usuario=request.user)
+            resultado = pedido.cambiar_estado(nuevo_estado)
+            if resultado['estado'] == 'exito':
+                return Response({"mensaje": "Estado del pedido actualizado con éxito"}, status=status.HTTP_200_OK)
+            return Response(resultado, status=status.HTTP_400_BAD_REQUEST)
+        except Pedidos.DoesNotExist:
+            return Response({"error": "Pedido no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+
+    @extend_schema(
+        description="(Staff) Cambia el estado de cualquier pedido",
+        request = CambiarEstadoPedidoSerializer,
+        responses = {200: "Estado del pedido actualizado con éxito", 400: None}
+    )
+    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def admin_cambiar_estado(self, request):
+        serializer = CambiarEstadoPedidoSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        pedido_id = serializer.validated_data['pedido_id']
+        nuevo_estado = serializer.validated_data['nuevo_estado']
+
+        try:
+            pedido = Pedidos.objects.get(id=pedido_id)
             resultado = pedido.cambiar_estado(nuevo_estado)
             if resultado['estado'] == 'exito':
                 return Response({"mensaje": "Estado del pedido actualizado con éxito"}, status=status.HTTP_200_OK)
@@ -275,6 +308,15 @@ class HistorialDeComprasViewSet(viewsets.ReadOnlyModelViewSet):
     def listar_historial(self, request):
         queryset = self.get_queryset()
         return Response(HistorialDeComprasSerializer(queryset, many=True).data)
+
+    @extend_schema(
+        description="(Staff) Obtiene el historial de compras global",
+        responses={200: AdminHistorialDeComprasSerializer(many=True)}
+    )
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAdminUser])
+    def admin_list(self, request):
+        queryset = HistorialDeCompras.objects.select_related('usuario', 'pedido').prefetch_related('pedido__pedidolibro_set__libro').order_by('-fecha')
+        return Response(AdminHistorialDeComprasSerializer(queryset, many=True).data)
     
     @extend_schema(
         description="Devolucion de una compra",
