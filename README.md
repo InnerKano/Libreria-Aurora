@@ -1,5 +1,9 @@
 # Sistema de Gestión de Librería
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/cdc8b189-82b0-43c6-b4f5-8fd8360ee860" width="800">
+</p>
+
 ## Descripción General
 
 Este proyecto implementa un sistema completo de gestión para una librería, con funcionalidades que incluyen:
