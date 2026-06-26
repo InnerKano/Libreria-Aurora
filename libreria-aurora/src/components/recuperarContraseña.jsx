@@ -5,7 +5,7 @@ import ButtonA from "./ui/buttonA";
 import { useNavigate } from "react-router-dom";
 import { Toaster, toast } from "sonner";
 import { Loader } from "lucide-react";
-import NavBar from "./navBar";
+import Navbar from "./Navbar";
 import { getApiUrl } from "../api/config";
 
 function RecuperarContraseña() {
@@ -69,7 +69,7 @@ function RecuperarContraseña() {
 
   return (
     <div className="w-full min-h-screen bg-[#DBDBDB]">
-      <NavBar />
+      <Navbar />
       <Toaster position="top-center" richColors />
       <AuthFrame>
         <h1 className="text-[min(3vw)] font-[500] w-[60%] text-center mb-4">

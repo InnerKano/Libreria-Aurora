@@ -2,7 +2,7 @@ import 'aos/dist/aos.css';
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { getApiUrl } from "../api/config";
-import NavBar from "./navBar";
+import Navbar from "./Navbar";
 import BookCard from "./book/bookCard";
 import LoadingSpinner from "./ui/LoadingSpinner";
 
@@ -155,7 +155,7 @@ function Catalogo() {
 
   return (
     <div className="w-full min-h-screen overflow-y-auto overflow-x-hidden bg-[#0B1026]">
-      <NavBar toggleSearch={toggleSearchInterface} />
+      <Navbar toggleSearch={toggleSearchInterface} />
 
       <div className="w-full flex flex-col p-[2vw]">
         {/* Interfaz de búsqueda - visible según estado */}

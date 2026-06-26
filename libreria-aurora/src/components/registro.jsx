@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import NavBar from "./navBar";
+import Navbar from "./Navbar";
 import { useNavigate } from "react-router-dom";
 import { Toaster, toast } from "sonner";
 import { Flag } from "lucide-react";
@@ -105,7 +105,7 @@ function Registro() {
 
   return (
     <div className="w-[100vw] h-[100vh] bg-[#DBDBDB]">
-      <NavBar />
+      <Navbar />
       <Toaster />
       <AuthFrame>
         <form onSubmit={handleSubmit} className="w-full flex flex-col items-center gap-[1vw] overflow-auto p-2">

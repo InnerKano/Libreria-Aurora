@@ -1,6 +1,6 @@
 import {useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
-import NavBar from "./navBar";
+import Navbar from "./Navbar";
 import { useNavigate } from "react-router-dom";
 import { getApiUrl } from "../api/config";
 import { CountryDropdown, RegionDropdown } from "react-country-region-selector";
@@ -250,7 +250,7 @@ function CarritoLibro() {
   if (carrito.length === 0) {
     return (
       <div>
-        <NavBar />
+        <Navbar />
         <div className="flex justify-center items-center h-screen">
           <p className="text-gray-500 text-lg">Tu carrito está vacío.</p>
         </div>
@@ -261,7 +261,7 @@ function CarritoLibro() {
   return (
     <div className="bg-[#f9f9fc] min-h-screen">
       <Toaster />
-      <NavBar />
+      <Navbar />
       <div className="max-w-3xl mx-auto my-10 p-6 bg-white rounded-xl shadow-md border border-blue-200">
         <h2 className="text-2xl font-bold mb-6 text-gray-800">Tu Carrito</h2>
         {/* Imprime en consola el objeto libro */

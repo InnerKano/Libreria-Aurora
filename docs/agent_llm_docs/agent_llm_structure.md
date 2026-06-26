@@ -310,7 +310,7 @@ Esta sección documenta **qué se agregó en la UI**, **dónde vive**, y **por q
 para ser modular, responsable y mantenible.
 
 ## Objetivo (por qué existe)
-- Exponer el asistente sin romper el layout actual ni tapar el `NavBar`.
+- Exponer el asistente sin romper el layout actual ni tapar el `Navbar`.
 - Mantener una integración reversible y aislada (componente de barra lateral + chat).
 - Consumir el contrato estable del backend (`message/results/actions`) sin acoplarse al proveedor LLM.
 
@@ -319,7 +319,7 @@ para ser modular, responsable y mantenible.
 ### UI core (React)
 - `libreria-aurora/src/components/agent/AgentDrawer.jsx`
 	- Renderiza la **barra lateral izquierda**.
-	- Respeta el alto del `NavBar` con `topOffset` (`12vh`).
+	- Respeta el alto del `Navbar` con `topOffset` (`12vh`).
 	- No bloquea navegación superior (overlay solo bajo el nav).
 
 - `libreria-aurora/src/components/agent/AgentChat.jsx`
@@ -330,7 +330,7 @@ para ser modular, responsable y mantenible.
 	- Resuelve degradación con mensajes claros.
 
 ### Integración global
-- `libreria-aurora/src/components/navBar.jsx`
+- `libreria-aurora/src/components/Navbar.jsx`
 	- Botón de apertura del asistente (ícono de chat).
 	- Monta `AgentDrawer` para que esté disponible en todas las vistas.
 
@@ -340,7 +340,7 @@ para ser modular, responsable y mantenible.
 		- `agentChat`, `agentSearch`, `agentActions`.
 
 ## Flujo de UI (cómo funciona)
-1) Usuario pulsa el botón de asistente en el `NavBar`.
+1) Usuario pulsa el botón de asistente en el `Navbar`.
 2) Se abre la barra lateral izquierda sin cubrir el nav.
 3) El usuario escribe; `AgentChat` envía a `/api/agent/`.
 4) Se renderiza `message` + cards de resultados.

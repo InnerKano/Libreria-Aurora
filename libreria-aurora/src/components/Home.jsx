@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getApiUrl } from "../api/config";
 import BookCard from "./book/bookCard";
-import NavBar from "./navBar";
+import Navbar from "./Navbar";
 import ButtonA from "./ui/buttonA";
 import LoadingSpinner from "./ui/LoadingSpinner";
 
@@ -102,7 +102,7 @@ const Home = () => {
   return (
     <div id="home" className="w-full min-h-screen overflow-auto">
       
-      <NavBar />
+      <Navbar />
 
       <div id="tiendas" className="bg-[#1B2459] w-full h-[50%] p-[2vw]" data-aos="zoom-in">
         <div className="relative w-full h-full flex">

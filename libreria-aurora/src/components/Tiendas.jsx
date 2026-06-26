@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaf
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getApiUrl } from "../api/config";
-import NavBar from './navBar';
+import Navbar from './Navbar';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -48,7 +48,7 @@ function Tiendas() {
 
   return (
     <div className="min-h-screen bg-gray-100 ">
-        <NavBar />
+        <Navbar />
         <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-6 border border-blue-200 p-[1vw] m-2">
             <h2 className="text-xl font-bold text-black border-b-2 border-yellow-400 pb-1">Tiendas</h2>
 

@@ -1879,8 +1879,8 @@ Se ha reestructurado completamente el sistema de catálogo y búsqueda para reso
   - Funcionalidad para mostrar/ocultar la interfaz de búsqueda
   - Conservación del estado de búsqueda mediante URL params
 
-### NavBar optimizado
-- **Mejoras en `NavBar.jsx`:**
+### Navbar optimizado
+- **Mejoras en `Navbar.jsx`:**
   - Comportamiento inteligente para el icono de búsqueda
   - Si está en catálogo: alterna la visualización de la interfaz de búsqueda
   - Si está en otra página: navega al catálogo con la interfaz de búsqueda visible
@@ -1916,7 +1916,7 @@ Se ha reestructurado completamente el sistema de catálogo y búsqueda para reso
 
 ## Proceso de búsqueda actual
 1. **Usuario accede al catálogo**: Ve todos los libros disponibles
-2. **Usuario activa la búsqueda**: Desde el navbar o con el botón "Mostrar búsqueda"
+2. **Usuario activa la búsqueda**: Desde el Navbar o con el botón "Mostrar búsqueda"
 3. **Usuario configura filtros**: Selecciona categoría, rango de precios y/o término de búsqueda
 4. **Usuario ordena resultados**: Selecciona campo y dirección (ascendente/descendente)
 5. **Sistema muestra resultados**: Filtrados y ordenados según los criterios especificados

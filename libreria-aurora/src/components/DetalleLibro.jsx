@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import NavBar from "./navBar.jsx";
+import Navbar from "./Navbar.jsx";
 import BuyBookSection from "./book/addTocCartButton";
 import { toast, Toaster } from "sonner";
 import { getApiUrl } from "../api/config.js";
@@ -16,7 +16,7 @@ function DetalleLibro() {
   if (!libroData) {
     return (
       <div>
-        <NavBar />
+        <Navbar />
         <div className="flex justify-center items-center h-screen">
           <p className="text-gray-500 text-lg">No se encontró la información del libro.</p>
         </div>
@@ -113,7 +113,7 @@ function DetalleLibro() {
   return (
     <div className="min-h-screen bg-gray-100">
       <Toaster position="top-center" richColors />
-      <NavBar />
+      <Navbar />
       <div className="max-w-4xl mx-auto p-6">
         <div className="bg-white shadow-xl rounded-2xl overflow-hidden">
           <div className="flex flex-col md:flex-row">

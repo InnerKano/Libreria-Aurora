@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Toaster, toast } from "sonner";
 import { getApiUrl } from "../api/config";
-import NavBar from "./navBar";
+import Navbar from "./Navbar";
 import AuthFrame from "./ui/authFrame";
 import ButtonA from "./ui/buttonA";
 import InputAuora from "./ui/input";
@@ -178,7 +178,7 @@ function ResetPassword() {
 
   return (
     <div className="w-full min-h-screen bg-[#DBDBDB]">
-      <NavBar />
+      <Navbar />
       <Toaster position="top-center" richColors />
       <AuthFrame>
         <h1 className="text-2xl md:text-3xl font-medium w-full md:w-[80%] text-center md:text-left mb-6">

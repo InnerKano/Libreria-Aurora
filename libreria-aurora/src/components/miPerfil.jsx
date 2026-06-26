@@ -1,6 +1,6 @@
 import { useState} from "react";
 import { useIsStaff } from "../hooks/useIsStaff"; 
-import NavBar from "./navBar";
+import Navbar from "./Navbar";
 import EditProfile from "./profile/editProfile";
 import FinancialManagement from "./profile/financialManagement";
 import ChangePassword from "./profile/ChangePassword";
@@ -54,7 +54,7 @@ function MiPerfil() {
   if (loading) {
     return (
       <div className="w-full min-h-screen flex flex-col">
-        <NavBar />
+        <Navbar />
         <div className="flex-grow flex items-center justify-center bg-[#2B388C] text-white text-lg">
           Cargando perfil...
         </div>
@@ -64,7 +64,7 @@ function MiPerfil() {
 
   return (
     <div className="w-full min-h-screen flex flex-col">
-      <NavBar />
+      <Navbar />
       <div className="w-full flex-grow flex flex-col lg:flex-row p-4 lg:p-10 bg-[#2B388C]">
 
         <div className="w-full lg:w-[25%] lg:mr-6 mb-4 lg:mb-0">

@@ -236,7 +236,7 @@ Dado que se tratará de un proyecto modular, se recomienda separar el back-end y
     │   ├── Home.jsx          # Página de inicio
     │   ├── login.jsx         # Componente de login
     │   ├── miPerfil.jsx      # Perfil del usuario
-    │   ├── navBar.jsx        # Barra de navegación
+    │   ├── Navbar.jsx        # Barra de navegación
     │   ├── profile/          # Paneles de perfil y administración
     │   │   ├── addPaymentMethod.jsx
     │   │   ├── adminForumMessages.jsx

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import NavBar from "./navBar";
+import Navbar from "./Navbar";
 import InputAuora from "./ui/input";
 import ButtonA from "./ui/buttonA";
 import AuthFrame from "./ui/authFrame";
@@ -103,7 +103,7 @@ function Login() {
 
     return(
         <div className="w-full min-h-screen bg-[#DBDBDB]">
-            <NavBar />
+            <Navbar />
 
             <AuthFrame>
                 <h1 className="text-[min(3vw)] font-[500] w-[60%] text-center mb-4">Inicio de sesión</h1>
