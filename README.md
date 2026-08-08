@@ -1,8 +1,14 @@
 # Sistema de Gestión de Librería
 
+# 📸 Gif demostrativo de la aplicación
 <p align="center">
   <img src="https://github.com/user-attachments/assets/cdc8b189-82b0-43c6-b4f5-8fd8360ee860" width="800">
 </p>
+
+## 🎨 Prototipo en Figma
+
+Puedes ver el diseño del prototipo en el siguiente enlace:  
+[Ver prototipo en Figma](https://www.figma.com/design/opRV9560e0lWwS0YodrhxL/LIBRERIA-Aurora?node-id=27-42&t=TYSFyX9OkytY9ky4-1)
 
 ## Descripción General
 
