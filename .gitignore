@@ -1,0 +1,14 @@
+/backend/venv/
+
+# Environment files (keep *.example files tracked)
+.env
+backend/.env
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Agent LLM / Vector DB artifacts (generated)
+/backend/agent/vector_db/
+/backend/agent/vector_db.zip
