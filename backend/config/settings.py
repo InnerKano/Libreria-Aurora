@@ -306,7 +306,7 @@ SPECTACULAR_SETTINGS = {
 # CORS settings
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # Next.js frontend
-    "https://pausa11.github.io",  # GitHub Pages
+    "https://innerkano.github.io",  # GitHub Pages
 ]
 
 # Channels settings
