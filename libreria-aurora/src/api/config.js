@@ -1,7 +1,7 @@
 // Configuration for API endpoints
 const config = {
   // Change this to false when you want to use local backend
-  useProductionBackend: false,
+  useProductionBackend: true,
   
   // Base URLs
   baseURLs: {
