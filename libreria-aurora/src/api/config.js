@@ -5,7 +5,7 @@ const config = {
   
   // Base URLs
   baseURLs: {
-    production: "https://proyecto-libreria-k9xr.onrender.com",
+    production: "https://libreria-aurora.onrender.com",
     local: "http://localhost:8000"
   },
   
